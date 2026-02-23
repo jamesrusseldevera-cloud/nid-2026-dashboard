@@ -6,7 +6,7 @@ import {
   Search, BarChart3, Filter, List, Columns, Save, Wifi, WifiOff, Table,
   Download, Upload, FileText, MapPin, Image as ImageIcon, Grid, Mail,
   Video, Link as LinkIcon, PieChart as PieChartIcon, Settings, Database, RotateCcw,
-  CalendarClock, Hourglass
+  CalendarClock, Hourglass, Bell, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
@@ -16,7 +16,7 @@ import {
 // --- FIREBASE IMPORTS ---
 import { initializeApp } from "firebase/app";
 import { 
-  getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, writeBatch 
+  getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, writeBatch 
 } from "firebase/firestore";
 
 // --- CONFIGURATION SECTION ---
@@ -34,9 +34,46 @@ const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
 const db = isFirebaseConfigured ? getFirestore(app) : null;
 
 // --- UTILITIES ---
-const exportToCSV = (data, filename) => {
+
+const getColorClass = (str) => {
+    if (!str || str === 'Unassigned') return 'bg-slate-100 text-slate-600 border-slate-200';
+    const colors = [
+      'bg-red-50 text-red-700 border-red-200', 'bg-orange-50 text-orange-700 border-orange-200',
+      'bg-amber-50 text-amber-700 border-amber-200', 'bg-green-50 text-green-700 border-green-200',
+      'bg-emerald-50 text-emerald-700 border-emerald-200', 'bg-teal-50 text-teal-700 border-teal-200',
+      'bg-cyan-50 text-cyan-700 border-cyan-200', 'bg-blue-50 text-blue-700 border-blue-200',
+      'bg-indigo-50 text-indigo-700 border-indigo-200', 'bg-violet-50 text-violet-700 border-violet-200',
+      'bg-purple-50 text-purple-700 border-purple-200', 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
+      'bg-pink-50 text-pink-700 border-pink-200', 'bg-rose-50 text-rose-700 border-rose-200'
+    ];
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    return colors[Math.abs(hash) % colors.length];
+};
+
+const getStatusColor = (status) => {
+    const s = String(status || '').trim();
+    switch(s) {
+      case 'Complete': return 'bg-green-50 border-green-200 text-green-700';
+      case 'In Progress': return 'bg-blue-50 border-blue-200 text-blue-700';
+      case 'Overdue': return 'bg-red-50 border-red-200 text-red-700';
+      default: return 'bg-slate-50 border-slate-200 text-slate-700';
+    }
+};
+
+const getStatusBorder = (status) => {
+    const s = String(status || '').trim();
+    switch(s) {
+      case 'Complete': return 'border-l-4 border-l-green-500';
+      case 'In Progress': return 'border-l-4 border-l-blue-500';
+      case 'Overdue': return 'border-l-4 border-l-red-500';
+      default: return 'border-l-4 border-l-slate-300';
+    }
+};
+
+const exportToCSV = (data, filename, notify) => {
   if (!data || data.length === 0) {
-    alert("No data available to export.");
+    notify("No data available to export.", 'error');
     return;
   }
   
@@ -67,6 +104,7 @@ const exportToCSV = (data, filename) => {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+  notify("Export successful!", 'success');
 };
 
 const downloadBackup = (allData) => {
@@ -152,37 +190,24 @@ const SECTORS = [
 
 const SPEAKER_DAYS = ["Day 0", "Day 1", "Day 2 (Morning)", "Day 2 (Afternoon)"];
 const SPEAKER_ASSIGNMENTS = [
-  "TBD", 
-  "Opening Remarks", 
-  "Closing Remarks", 
-  "Scene Setter", 
-  "Panelist", 
-  "Moderator", 
-  "Message from the President", 
-  "Keynote Speech", 
-  "Message of Support", 
-  "Others"
+  "TBD", "Opening Remarks", "Closing Remarks", "Scene Setter", 
+  "Panelist", "Moderator", "Message from the President", 
+  "Keynote Speech", "Message of Support", "Others"
 ];
 
 const ASEAN_COUNTRIES = [
-  { name: "Philippines", flag: "🇵🇭" },
-  { name: "Singapore", flag: "🇸🇬" },
-  { name: "Malaysia", flag: "🇲🇾" },
-  { name: "Indonesia", flag: "🇮🇩" },
-  { name: "Thailand", flag: "🇹🇭" },
-  { name: "Viet Nam", flag: "🇻🇳" },
-  { name: "Brunei Darussalam", flag: "🇧🇳" },
-  { name: "Cambodia", flag: "🇰🇭" },
-  { name: "Lao PDR", flag: "🇱🇦" },
-  { name: "Myanmar", flag: "🇲🇲" },
-  { name: "Timor-Leste", flag: "🇹🇱" },
-  { name: "International / Other", flag: "🌐" }
+  { name: "Philippines", flag: "🇵🇭" }, { name: "Singapore", flag: "🇸🇬" },
+  { name: "Malaysia", flag: "🇲🇾" }, { name: "Indonesia", flag: "🇮🇩" },
+  { name: "Thailand", flag: "🇹🇭" }, { name: "Viet Nam", flag: "🇻🇳" },
+  { name: "Brunei Darussalam", flag: "🇧🇳" }, { name: "Cambodia", flag: "🇰🇭" },
+  { name: "Lao PDR", flag: "🇱🇦" }, { name: "Myanmar", flag: "🇲🇲" },
+  { name: "Timor-Leste", flag: "🇹🇱" }, { name: "International / Other", flag: "🌐" }
 ];
 
 const INITIAL_ORG = [
-  { id: '1', role: "Event Director", name: "Diane Gail L. Maharjan", division: "OED", level: 1 },
-  { id: '2', role: "Event Lead", name: "James De Vera", division: "ICPD", level: 2 },
-  { id: '3', role: "Event Co-Lead", name: "Jovs Laureta", division: "ICPD", level: 2 }
+  { id: '1', role: "Event Director", name: "Diane Gail L. Maharjan", division: "OED", level: 1, photo: '' },
+  { id: '2', role: "Event Lead", name: "James De Vera", division: "ICPD", level: 2, photo: '' },
+  { id: '3', role: "Event Co-Lead", name: "Jovs Laureta", division: "ICPD", level: 2, photo: '' }
 ];
 const INITIAL_TASKS = [];
 const INITIAL_SPEAKERS = [];
@@ -228,16 +253,32 @@ const useDataSync = (collectionName, initialData) => {
   return { data, add, update, remove, reset };
 };
 
+// --- COMPONENT: TOAST NOTIFICATION ---
+const Toast = ({ message, type, onClose }) => {
+    if (!message) return null;
+    return (
+        <div className="fixed bottom-6 right-6 z-[100] animate-in slide-in-from-bottom-5 fade-in duration-300">
+            <div className={`flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border ${type === 'error' ? 'bg-red-900 border-red-700 text-red-50' : type === 'success' ? 'bg-green-900 border-green-700 text-green-50' : 'bg-slate-900 border-slate-700 text-slate-50'}`}>
+                {type === 'error' ? <AlertTriangle size={20}/> : type === 'success' ? <CheckCircle2 size={20}/> : <Bell size={20}/>}
+                <span className="font-bold text-sm">{message}</span>
+                <button onClick={onClose} className="ml-4 opacity-70 hover:opacity-100"><X size={16}/></button>
+            </div>
+        </div>
+    );
+};
+
 // --- COMPONENT: DASHBOARD HOME ---
-const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = [] }) => {
+const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = [], budget = [], isAdmin }) => {
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(t => t.status === 'Complete').length;
-  const overdueTasks = tasks.filter(t => t.status === 'Overdue').length;
-  const confirmedSpeakers = speakers.filter(s => s.status === 'Confirmed').length;
-  const confirmedGuests = attendees.filter(a => a.status === 'Confirmed').length;
+  const completedTasks = tasks.filter(t => safeStr(t.status).trim() === 'Complete').length;
+  const overdueTasks = tasks.filter(t => safeStr(t.status).trim() === 'Overdue').length;
+  const confirmedSpeakers = speakers.filter(s => safeStr(s.status).trim() === 'Confirmed').length;
+  const confirmedGuests = attendees.filter(a => safeStr(a.status).trim() === 'Confirmed').length;
+  const totalSpent = budget.reduce((a, b) => a + Number(b.amount || 0), 0);
   
   const todayStr = new Date().toISOString().split('T')[0];
-  const dueTodayTasks = tasks.filter(t => t.endDate === todayStr && t.status !== 'Complete');
+  const dueTodayTasks = tasks.filter(t => t.endDate === todayStr && safeStr(t.status).trim() !== 'Complete');
+  const criticalTasks = tasks.filter(t => (t.priority === 'Critical' || safeStr(t.status).trim() === 'Overdue') && safeStr(t.status).trim() !== 'Complete');
 
   const [timeLeft, setTimeLeft] = useState({});
   useEffect(() => {
@@ -287,40 +328,95 @@ const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = []
                <div className="text-3xl font-black text-green-400">{confirmedGuests}</div>
                <div className="text-[10px] uppercase tracking-widest font-bold opacity-60">Confirmed Guests</div>
             </div>
+            {isAdmin && (
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 min-w-[160px]">
+               <div className="text-2xl font-black text-emerald-400 mt-1">₱{(totalSpent/1000).toFixed(1)}k</div>
+               <div className="text-[10px] uppercase tracking-widest font-bold opacity-60">Budget Allocation</div>
+            </div>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group">
-         <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
-         <h3 className="font-black text-slate-800 text-lg mb-4 flex items-center gap-2">
-            <Clock className="text-blue-500" size={20}/> Tasks Due Today ({dueTodayTasks.length})
-         </h3>
-         {dueTodayTasks.length > 0 ? (
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {dueTodayTasks.map(t => (
-                    <div key={t.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveTab('tasks')}>
-                        <div>
-                           <div className="font-bold text-slate-700">{safeStr(t.name)}</div>
-                           <div className="text-xs text-slate-400 font-medium mt-1">{safeStr(t.committee)}</div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Critical Items Panel */}
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group flex flex-col h-96">
+            <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
+            <div className="flex justify-between items-center mb-4 pl-2">
+                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                    <AlertTriangle className="text-red-500" size={20}/> Critical & Overdue Actions
+                </h3>
+                <span className="bg-red-100 text-red-700 font-black text-xs px-2 py-1 rounded-lg">{criticalTasks.length}</span>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                {criticalTasks.length > 0 ? (
+                    criticalTasks.map(t => (
+                        <div key={t.id} className="flex justify-between items-center p-4 bg-red-50/50 rounded-2xl border border-red-100 hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveTab('tasks')}>
+                            <div className="flex-1 pr-4">
+                                <div className="font-bold text-slate-800 text-sm mb-1">{safeStr(t.name)}</div>
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                    <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-widest border ${getColorClass(t.committee)}`}>{safeStr(t.committee)}</span>
+                                    <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-widest border ${getStatusColor(t.status)}`}>{safeStr(t.status)}</span>
+                                </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                                <div className="flex -space-x-2">
+                                    {Array.isArray(t.assignedTo) ? t.assignedTo.map((a, i) => (
+                                        <div key={i} className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black ${getColorClass(a)}`} title={a}>{safeStr(a).charAt(0)}</div>
+                                    )) : <div className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black ${getColorClass(t.assignedTo)}`}>{safeStr(t.assignedTo).charAt(0)}</div>}
+                                </div>
+                                <span className="text-[10px] font-black text-slate-500">{t.endDate || 'No Due Date'}</span>
+                            </div>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                           <div className="flex -space-x-2">
-                                {Array.isArray(t.assignedTo) ? t.assignedTo.map((a, i) => (
-                                    <div key={i} className="w-6 h-6 rounded-full bg-blue-100 border-2 border-white text-blue-600 flex items-center justify-center text-[10px] font-black" title={a}>{safeStr(a).charAt(0)}</div>
-                                )) : <div className="w-6 h-6 rounded-full bg-blue-100 border-2 border-white text-blue-600 flex items-center justify-center text-[10px] font-black">{safeStr(t.assignedTo).charAt(0)}</div>}
-                           </div>
-                           <span className="text-[10px] uppercase font-black tracking-widest text-orange-500">{safeStr(t.status)}</span>
-                        </div>
+                    ))
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                        <CheckCircle2 className="mb-2 opacity-50 text-green-500" size={32}/>
+                        <p className="text-sm font-bold">No critical or overdue tasks!</p>
                     </div>
-                ))}
-             </div>
-         ) : (
-             <div className="p-6 text-center text-slate-400 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
-                <CheckCircle2 className="mx-auto mb-2 opacity-50" size={24}/>
-                <p className="text-sm font-bold">No tasks due today. Stay ahead of schedule!</p>
-             </div>
-         )}
+                )}
+            </div>
+          </div>
+
+          {/* Due Today Panel */}
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group flex flex-col h-96">
+            <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+            <div className="flex justify-between items-center mb-4 pl-2">
+                <h3 className="font-black text-slate-800 text-lg flex items-center gap-2">
+                    <Clock className="text-blue-500" size={20}/> Tasks Due Today
+                </h3>
+                <span className="bg-blue-100 text-blue-700 font-black text-xs px-2 py-1 rounded-lg">{dueTodayTasks.length}</span>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                {dueTodayTasks.length > 0 ? (
+                    dueTodayTasks.map(t => (
+                        <div key={t.id} className="flex justify-between items-center p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:shadow-md transition-all cursor-pointer" onClick={() => setActiveTab('tasks')}>
+                            <div className="flex-1 pr-4">
+                                <div className="font-bold text-slate-700 text-sm mb-1">{safeStr(t.name)}</div>
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                    <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-widest border ${getColorClass(t.committee)}`}>{safeStr(t.committee)}</span>
+                                </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                                <div className="flex -space-x-2">
+                                    {Array.isArray(t.assignedTo) ? t.assignedTo.map((a, i) => (
+                                        <div key={i} className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black ${getColorClass(a)}`} title={a}>{safeStr(a).charAt(0)}</div>
+                                    )) : <div className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-[10px] font-black ${getColorClass(t.assignedTo)}`}>{safeStr(t.assignedTo).charAt(0)}</div>}
+                                </div>
+                                <span className={`text-[9px] uppercase font-black tracking-widest px-2 py-0.5 rounded-md border ${getStatusColor(t.status)}`}>{safeStr(t.status)}</span>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100">
+                        <CalendarClock className="mb-2 opacity-50" size={32}/>
+                        <p className="text-sm font-bold">No tasks due today. Stay ahead!</p>
+                    </div>
+                )}
+            </div>
+          </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -344,11 +440,13 @@ const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = []
 };
 
 // --- COMPONENT: ORG CHART WITH HIERARCHY ---
-const OrgChart = ({ dataObj, isAdmin }) => {
+const OrgChart = ({ dataObj, isAdmin, notify }) => {
   const { data: members = [], add, update, remove } = dataObj;
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [viewMode, setViewMode] = useState('tree');
+  const [filterLevel, setFilterLevel] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
   
   const levels = [1, 2, 3, 4];
@@ -374,12 +472,13 @@ const OrgChart = ({ dataObj, isAdmin }) => {
             role: row.role || row.Role || 'Member',
             division: row.division || row.Division || row.Office || 'NEDA',
             level: row.level || row.Level || lvl,
+            photo: row.photo || row.Photo || '',
             remarks: row.remarks || row.Notes || ''
           });
           count++;
         }
       });
-      alert(`Imported ${count} members successfully!`);
+      notify(`Imported ${count} members successfully!`, 'success');
     };
     reader.readAsText(file);
   };
@@ -389,69 +488,114 @@ const OrgChart = ({ dataObj, isAdmin }) => {
       setShowModal(true);
   };
 
+  const filteredMembers = members.filter(m => {
+      const lv = String(m.level).replace(/[^0-9]/g, '');
+      const matchLevel = filterLevel === 'All' || lv === String(filterLevel);
+      const matchSearch = safeStr(m.name).toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          safeStr(m.role).toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          safeStr(m.division).toLowerCase().includes(searchTerm.toLowerCase());
+      return matchLevel && matchSearch;
+  });
+
   return (
-    <div className="space-y-8 h-full overflow-y-auto pb-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-6 border-slate-200">
+    <div className="space-y-6 h-full overflow-y-auto pb-10">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 border-b pb-6 border-slate-200">
         <div><h2 className="text-3xl font-black text-slate-800">Organizational Structure</h2><p className="text-slate-500">Event Leadership & Reporting Hierarchy</p></div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
+                <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+                <input placeholder="Search members..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+            </div>
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-2">
+                <Filter size={14} className="text-slate-400 mr-2"/>
+                <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer">
+                    <option value="All">All Levels</option>
+                    <option value="1">Level 1 (Directors)</option>
+                    <option value="2">Level 2 (Leads)</option>
+                    <option value="3">Level 3 (Focals)</option>
+                    <option value="4">Level 4 (Support)</option>
+                </select>
+            </div>
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleFileUpload}/>
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> Import CSV</button>
-                <button onClick={() => exportToCSV(members, 'nid-org-structure')} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> Export</button>
+                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import CSV</span></button>
+                <button onClick={() => exportToCSV(members, 'nid-org-structure', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
               </>
             )}
-            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2">
+            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => setViewMode('tree')} className={`p-1.5 rounded-md transition-all ${viewMode === 'tree' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Tree View"><Grid size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
             </div>
-            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add Member</button>}
+            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add Member</button>}
         </div>
       </div>
       
       {viewMode === 'tree' ? (
         <div className="relative pt-6 max-w-5xl mx-auto">
-          {/* Central Spine */}
-          <div className="absolute left-1/2 top-0 bottom-10 w-1 bg-slate-200 -translate-x-1/2 rounded-full hidden md:block"></div>
+          {filterLevel === 'All' && <div className="absolute left-1/2 top-0 bottom-10 w-1 bg-slate-200 -translate-x-1/2 rounded-full hidden md:block"></div>}
 
-          {levels.map((level, i) => {
-            const lvMembers = members.filter(m => Number(m.level) === level);
-            if (lvMembers.length === 0) return null;
+          {levels.map((level) => {
+            const lvMembers = filteredMembers.filter(m => Number(m.level) === level);
+            if (lvMembers.length === 0 && filterLevel !== 'All') return null; 
+            if (lvMembers.length === 0 && !isAdmin) return null; 
             
             return (
-              <div key={level} className="relative z-10 flex flex-col items-center mb-16 group">
+              <div key={level} 
+                   className="relative z-10 flex flex-col items-center mb-16 group w-full min-h-[150px] rounded-3xl transition-colors border-2 border-transparent p-4"
+                   onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('bg-blue-50/50', 'border-blue-200', 'border-dashed'); }}
+                   onDragLeave={e => { e.currentTarget.classList.remove('bg-blue-50/50', 'border-blue-200', 'border-dashed'); }}
+                   onDrop={e => {
+                       e.preventDefault();
+                       e.currentTarget.classList.remove('bg-blue-50/50', 'border-blue-200', 'border-dashed');
+                       const memberId = e.dataTransfer.getData('orgMemberId');
+                       if(memberId && isAdmin) update(memberId, { level });
+                   }}
+              >
                   <div className={`px-5 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-8 shadow-md border-2 border-white relative z-20 
                       ${level === 1 ? 'bg-blue-600 text-white' : level === 2 ? 'bg-indigo-500 text-white' : level === 3 ? 'bg-sky-400 text-white' : 'bg-slate-400 text-white'}`}>
                       Level {level}
                   </div>
                   
-                  {lvMembers.length > 1 && (
-                      <div className="absolute top-[40px] left-[15%] right-[15%] h-1 bg-slate-200 hidden md:block rounded-full"></div>
+                  {lvMembers.length > 1 && filterLevel === 'All' && (
+                      <div className="absolute top-[56px] left-[15%] right-[15%] h-1 bg-slate-200 hidden md:block rounded-full"></div>
                   )}
 
                   <div className="flex flex-wrap justify-center gap-6 w-full relative z-20">
                       {lvMembers.map(m => (
                           <div key={m.id} className="relative flex flex-col items-center">
-                              {lvMembers.length > 1 && <div className="hidden md:block w-1 h-6 bg-slate-200 absolute -top-6 rounded-full"></div>}
+                              {lvMembers.length > 1 && filterLevel === 'All' && <div className="hidden md:block w-1 h-6 bg-slate-200 absolute -top-6 rounded-full"></div>}
                               
-                              <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 text-center shadow-sm w-52 hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 transition-all group/card relative">
+                              <div draggable={isAdmin} 
+                                   onDragStart={e => e.dataTransfer.setData('orgMemberId', m.id)}
+                                   className={`bg-white p-6 rounded-2xl border-2 text-center shadow-sm w-52 hover:shadow-xl hover:-translate-y-1 transition-all group/card relative 
+                                   ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''} ${m.level === 1 ? 'border-blue-200' : 'border-slate-100 hover:border-blue-300'}`}>
                                   {isAdmin && (
                                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
                                        <button onClick={() => openEditModal(m)} className="text-slate-400 hover:text-blue-500 bg-slate-50 border p-1 rounded shadow-sm"><Edit2 size={12}/></button>
                                        <button onClick={() => remove(m.id)} className="text-slate-400 hover:text-red-500 bg-slate-50 border p-1 rounded shadow-sm"><Trash2 size={12}/></button>
                                     </div>
                                   )}
-                                  <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center font-black text-white text-2xl shadow-lg 
-                                      ${level === 1 ? 'bg-gradient-to-br from-blue-500 to-blue-700' : level === 2 ? 'bg-gradient-to-br from-indigo-400 to-indigo-600' : 'bg-gradient-to-br from-slate-400 to-slate-600'}`}>
-                                      {safeStr(m.name).charAt(0)}
-                                  </div>
-                                  <h4 className="font-bold text-slate-800 text-sm">{safeStr(m.role)}</h4>
+                                  
+                                  {m.photo ? (
+                                      <img src={m.photo} alt={m.name} className="w-16 h-16 mx-auto mb-4 rounded-2xl object-cover shadow-lg border-2 border-slate-100 bg-slate-50" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=e0e7ff&color=4f46e5`; }} />
+                                  ) : (
+                                      <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center font-black text-white text-2xl shadow-lg 
+                                          ${level === 1 ? 'bg-gradient-to-br from-blue-500 to-blue-700' : level === 2 ? 'bg-gradient-to-br from-indigo-400 to-indigo-600' : 'bg-gradient-to-br from-slate-400 to-slate-600'}`}>
+                                          {safeStr(m.name).charAt(0)}
+                                      </div>
+                                  )}
+                                  
+                                  <h4 className="font-bold text-slate-800 text-sm leading-tight">{safeStr(m.role)}</h4>
                                   <p className="text-blue-600 text-xs font-bold mt-1 line-clamp-1">{safeStr(m.name)}</p>
                                   <div className="mt-3 pt-3 border-t border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">{safeStr(m.division)}</div>
                                   {isAdmin && m.remarks && <div className="mt-2 text-[9px] text-slate-400 italic flex items-center justify-center gap-1"><AlertCircle size={10}/> {m.remarks}</div>}
                               </div>
                           </div>
                       ))}
+                      {lvMembers.length === 0 && isAdmin && (
+                          <div className="text-xs font-bold text-slate-300 border-2 border-dashed border-slate-200 p-4 rounded-2xl w-52 flex items-center justify-center">Drag members here</div>
+                      )}
                   </div>
               </div>
             );
@@ -464,9 +608,18 @@ const OrgChart = ({ dataObj, isAdmin }) => {
               <tr><th className="p-4">Name</th><th className="p-4">Role</th><th className="p-4">Division</th><th className="p-4 text-center">Level</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {members.sort((a,b) => a.level - b.level).map(m => (
+              {filteredMembers.sort((a,b) => a.level - b.level).map(m => (
                 <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
-                  <td className="p-4 font-bold text-slate-800">{safeStr(m.name)}</td>
+                  <td className="p-4 font-bold text-slate-800 flex items-center gap-3">
+                    {m.photo ? (
+                        <img src={m.photo} alt={m.name} className="w-8 h-8 rounded-full border object-cover shrink-0 bg-slate-50" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=e0e7ff&color=4f46e5`; }} />
+                    ) : (
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs border ${getColorClass(m.name)}`}>
+                            {safeStr(m.name).charAt(0)}
+                        </div>
+                    )}
+                    {safeStr(m.name)}
+                  </td>
                   <td className="p-4 text-blue-600 font-bold text-xs">{safeStr(m.role)}</td>
                   <td className="p-4 text-xs font-bold text-slate-400 uppercase tracking-widest">{safeStr(m.division)}</td>
                   <td className="p-4 text-center">
@@ -495,11 +648,11 @@ const OrgChart = ({ dataObj, isAdmin }) => {
              const fd = new FormData(e.target);
              const data = { 
                  name: fd.get('name') || '', role: fd.get('role') || '', division: fd.get('division') || '', 
-                 level: Number(fd.get('level')) || 3, remarks: fd.get('remarks') || '' 
+                 level: Number(fd.get('level')) || 3, photo: fd.get('photo') || '', remarks: fd.get('remarks') || '' 
              };
              if (editingItem) update(editingItem.id, data); else add(data);
              setShowModal(false);
-           }} className="bg-white p-8 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl">
+           }} className="bg-white p-8 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
               <h3 className="text-xl font-bold">{editingItem ? 'Edit Member' : 'Add Team Member'}</h3>
               <input name="name" defaultValue={editingItem?.name} placeholder="Full Name" required className="w-full p-4 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"/>
               <input name="role" defaultValue={editingItem?.role} placeholder="Role (e.g. Lead)" required className="w-full p-4 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"/>
@@ -510,6 +663,10 @@ const OrgChart = ({ dataObj, isAdmin }) => {
                  <option value="3">Level 3 (Member/Focal)</option>
                  <option value="4">Level 4 (Support)</option>
               </select>
+              <div className="relative">
+                  <ImageIcon size={16} className="absolute left-4 top-5 text-slate-400"/>
+                  <input name="photo" defaultValue={editingItem?.photo} placeholder="Photo URL (Optional)" className="w-full p-4 pl-12 border border-slate-200 rounded-2xl outline-none font-medium"/>
+              </div>
               {isAdmin && <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>}
               <div className="flex gap-2 pt-4">
                 <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg shadow-blue-500/20 hover:bg-blue-700">Save Member</button>
@@ -523,21 +680,25 @@ const OrgChart = ({ dataObj, isAdmin }) => {
 };
 
 // --- COMPONENT: TASK MANAGER ---
-const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) => {
+const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], notify }) => {
   const { data: tasks = [], add, update, remove } = dataObj;
   const [showModal, setShowModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [viewMode, setViewMode] = useState('board');
-  const [search, setSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCommittee, setFilterCommittee] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
   const [selectedAssignees, setSelectedAssignees] = useState([]); 
   const fileInputRef = useRef(null);
 
   const columns = ['Not Started', 'In Progress', 'Complete', 'Overdue'];
 
-  const filteredTasks = tasks.filter(t => 
-    safeStr(t.name).toLowerCase().includes(safeStr(search).toLowerCase()) ||
-    safeStr(t.committee).toLowerCase().includes(safeStr(search).toLowerCase())
-  );
+  const filteredTasks = tasks.filter(t => {
+    const matchSearch = safeStr(t.name).toLowerCase().includes(safeStr(searchTerm).toLowerCase()) || safeStr(t.committee).toLowerCase().includes(safeStr(searchTerm).toLowerCase());
+    const matchCom = filterCommittee === 'All' || safeStr(t.committee).trim().toLowerCase() === filterCommittee.toLowerCase();
+    const matchStat = filterStatus === 'All' || safeStr(t.status).trim().toLowerCase() === filterStatus.toLowerCase();
+    return matchSearch && matchCom && matchStat;
+  });
 
   const handleDragStart = (e, id) => e.dataTransfer.setData('taskId', id);
   const handleDrop = (e, status) => {
@@ -571,7 +732,7 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
           count++;
         }
       });
-      alert(`Imported ${count} tasks successfully!`);
+      notify(`Imported ${count} tasks successfully!`, 'success');
     };
     reader.readAsText(file);
   };
@@ -584,22 +745,40 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
         <div><h2 className="text-3xl font-black text-slate-800">Task Board</h2><p className="text-slate-500">Track deliverables with multiple owners</p></div>
-        <div className="flex flex-wrap gap-2">
-           <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl">
-             <Search size={16} className="text-slate-400 mr-2"/>
-             <input placeholder="Search tasks..." className="bg-transparent outline-none text-sm font-medium w-full" value={search} onChange={e => setSearch(e.target.value)}/>
+        <div className="flex flex-wrap items-center gap-2">
+           <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px]">
+             <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+             <input placeholder="Search tasks..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
            </div>
+           
+           <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2">
+               <Filter size={14} className="text-slate-400 mr-2 shrink-0"/>
+               <select value={filterCommittee} onChange={e => setFilterCommittee(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[120px] truncate">
+                   <option value="All">All Committees</option>
+                   {committees.map(c => <option key={c} value={c}>{c}</option>)}
+               </select>
+           </div>
+           
+           {viewMode === 'list' && (
+               <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2">
+                   <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer">
+                       <option value="All">All Statuses</option>
+                       {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                   </select>
+               </div>
+           )}
+
            {isAdmin && (
              <>
                <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleFileUpload}/>
-               <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden md:inline">Import</span></button>
-               <button onClick={() => exportToCSV(tasks, 'nid-tasks')} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden md:inline">Export</span></button>
+               <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
+               <button onClick={() => exportToCSV(tasks, 'nid-tasks', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
              </>
            )}
-           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2">
-               <button onClick={() => setViewMode('board')} className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Board View"><Columns size={16}/></button>
+           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
+               <button onClick={() => {setViewMode('board'); setFilterStatus('All');}} className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Board View"><Columns size={16}/></button>
                <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
            </div>
            {isAdmin && <button onClick={() => { 
@@ -614,15 +793,16 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
         <div className="flex-1 overflow-x-auto pb-6">
           <div className="flex gap-6 h-full min-w-[1200px]">
             {columns.map(col => (
-              <div key={col} className="flex-1 bg-slate-100/70 rounded-3xl p-4 flex flex-col border border-slate-200"
+              <div key={col} className={`flex-1 rounded-3xl p-4 flex flex-col border border-slate-200 ${col === 'Complete' ? 'bg-green-50/30' : col === 'Overdue' ? 'bg-red-50/30' : col === 'In Progress' ? 'bg-blue-50/30' : 'bg-slate-100/70'}`}
                    onDragOver={e => e.preventDefault()} onDrop={e => handleDrop(e, col)}>
                  <div className="flex justify-between items-center mb-4 px-2 font-black text-slate-500 text-xs uppercase tracking-widest">
-                    <span>{col}</span>
-                    <span className="bg-white px-2 py-0.5 rounded-full border shadow-sm">{filteredTasks.filter(t => t.status === col).length}</span>
+                    <span className={col === 'Complete' ? 'text-green-700' : col === 'Overdue' ? 'text-red-700' : col === 'In Progress' ? 'text-blue-700' : 'text-slate-600'}>{col}</span>
+                    <span className="bg-white px-2 py-0.5 rounded-full border shadow-sm">{filteredTasks.filter(t => safeStr(t.status).trim() === col).length}</span>
                  </div>
-                 <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                  {filteredTasks.filter(t => t.status === col).map(t => (
-                    <div key={t.id} draggable={isAdmin} onDragStart={e => handleDragStart(e, t.id)} className={`bg-white p-5 rounded-2xl shadow-sm border border-slate-200 transition-all group relative ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-xl hover:border-blue-300' : ''}`}>
+                 <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+                  {filteredTasks.filter(t => safeStr(t.status).trim() === col).map(t => (
+                    <div key={t.id} draggable={isAdmin} onDragStart={e => handleDragStart(e, t.id)} 
+                         className={`bg-white p-4 rounded-2xl shadow-sm border transition-all group relative ${getStatusBorder(t.status)} ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-lg hover:-translate-y-1' : ''}`}>
                       <div className="flex justify-between items-start mb-3">
                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${t.priority === 'Critical' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>{safeStr(t.priority)}</span>
                         <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2">
@@ -637,19 +817,19 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
                       
                       <div className="font-bold text-slate-800 leading-tight mb-3 text-sm">{safeStr(t.name)}</div>
                       
-                      <div className="flex flex-wrap gap-1.5 mb-4">
+                      <div className="flex flex-wrap gap-1.5 mb-3">
                           {Array.isArray(t.assignedTo) ? t.assignedTo.map((a, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 bg-blue-50/50 text-blue-700 px-2 py-1 rounded-md text-[10px] font-bold border border-blue-100/50">
-                                  <div className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[8px]">{safeStr(a).charAt(0)}</div>
+                              <div key={idx} className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold border ${getColorClass(a)}`}>
+                                  <div className="w-4 h-4 rounded-full bg-white/50 flex items-center justify-center text-[8px]">{safeStr(a).charAt(0)}</div>
                                   {safeStr(a)}
                               </div>
                           )) : <span className="text-xs text-slate-400">{safeStr(t.assignedTo)}</span>}
                       </div>
 
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">{safeStr(t.committee)}</div>
+                      <div className={`inline-block px-2 py-1 rounded text-[9px] font-black uppercase tracking-widest border mb-3 ${getColorClass(t.committee)}`}>{safeStr(t.committee)}</div>
 
                       {isAdmin && t.remarks && (
-                         <div className="mt-2 mb-3 pt-3 border-t border-slate-50 text-[10px] text-slate-500 italic flex items-start gap-1">
+                         <div className="mt-1 mb-3 pt-3 border-t border-slate-50 text-[10px] text-slate-500 italic flex items-start gap-1">
                              <AlertCircle size={12} className="shrink-0 mt-0.5 text-slate-400"/>
                              <span>{t.remarks}</span>
                          </div>
@@ -657,16 +837,16 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
 
                       <div className="flex justify-between items-center pt-3 border-t border-slate-50">
                          <select 
-                            value={t.status} 
+                            value={safeStr(t.status).trim()} 
                             onChange={(e) => update(t.id, { status: e.target.value })}
-                            className="text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-md border outline-none cursor-pointer bg-slate-50 text-slate-600 focus:ring-2 focus:ring-blue-500 transition-all hover:bg-slate-100"
+                            className={`text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-md border outline-none cursor-pointer transition-all ${getStatusColor(t.status)}`}
                          >
                             {columns.map(c => <option key={c} value={c}>{c}</option>)}
                          </select>
 
                          <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1.5 rounded-md border border-slate-100">
                              <CalendarClock size={12} className="text-blue-400"/> 
-                             {getDuration(t.startDate, t.endDate)} Days
+                             {getDuration(t.startDate, t.endDate)}d
                          </div>
                       </div>
                     </div>
@@ -687,23 +867,24 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
                 <tr key={t.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4">
                     <div className="font-bold text-slate-800">{safeStr(t.name)}</div>
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">{safeStr(t.committee)}</div>
+                    <div className={`inline-block px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border mt-1.5 ${getColorClass(t.committee)}`}>{safeStr(t.committee)}</div>
                   </td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-1">
                       {Array.isArray(t.assignedTo) ? t.assignedTo.map((a, idx) => (
-                        <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-bold border border-blue-100">{safeStr(a)}</span>
+                        <span key={idx} className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${getColorClass(a)}`}>{safeStr(a)}</span>
                       )) : <span className="bg-slate-50 text-slate-600 px-2 py-0.5 rounded-md text-[10px] font-bold border border-slate-200">{safeStr(t.assignedTo)}</span>}
                     </div>
                   </td>
                   <td className="p-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${t.priority === 'Critical' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>{safeStr(t.priority)}</span>
+                      <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md border ${t.priority === 'Critical' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{safeStr(t.priority)}</span>
                       <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1"><CalendarClock size={12}/> {getDuration(t.startDate, t.endDate)}d</span>
                     </div>
                   </td>
                   <td className="p-4">
-                    <select value={t.status} onChange={(e) => update(t.id, { status: e.target.value })} className="text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-md border outline-none cursor-pointer bg-white text-slate-600 focus:ring-2 focus:ring-blue-500 transition-all hover:bg-slate-50 w-full">
+                    <select value={safeStr(t.status).trim()} onChange={(e) => update(t.id, { status: e.target.value })} 
+                        className={`text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-md border outline-none cursor-pointer w-full transition-all ${getStatusColor(t.status)}`}>
                       {columns.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </td>
@@ -743,15 +924,18 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
                 if(editingTask) update(editingTask.id, item);
                 else add(item);
                 setShowModal(false);
-              }} className="space-y-4 overflow-y-auto pr-2">
+              }} className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
                  <div><label className="text-xs font-bold uppercase text-slate-400 ml-1">Task Name</label><input name="name" defaultValue={editingTask?.name} required className="w-full p-4 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500"/></div>
                  
                  <div>
                     <label className="text-xs font-bold uppercase text-slate-400 ml-1">Assign Team Members</label>
                     <div className="grid grid-cols-2 gap-2 mt-2 p-3 bg-slate-50 rounded-2xl border border-slate-100 max-h-40 overflow-y-auto">
                         {teamMembers.map(member => (
-                            <label key={member} className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer hover:bg-white p-1 rounded transition-colors">
-                                <input type="checkbox" checked={selectedAssignees.includes(member)} onChange={() => toggleAssignee(member)} className="rounded text-blue-600 focus:ring-blue-500"/>
+                            <label key={member} className={`flex items-center gap-2 text-xs font-medium cursor-pointer p-1.5 rounded-lg border transition-colors ${selectedAssignees.includes(member) ? getColorClass(member) : 'bg-white border-transparent text-slate-700 hover:bg-slate-100'}`}>
+                                <input type="checkbox" checked={selectedAssignees.includes(member)} onChange={() => toggleAssignee(member)} className="rounded text-blue-600 focus:ring-blue-500 hidden"/>
+                                <div className={`w-3 h-3 rounded border flex items-center justify-center ${selectedAssignees.includes(member) ? 'bg-current border-transparent' : 'border-slate-300'}`}>
+                                    {selectedAssignees.includes(member) && <CheckSquare size={10} className="text-white"/>}
+                                </div>
                                 {member}
                             </label>
                         ))}
@@ -782,17 +966,27 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
 };
 
 // --- COMPONENT: PROGRAM MANAGER ---
-const ProgramManager = ({ dataObj, isAdmin }) => {
+const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
   const { data: events = [], add, update, remove } = dataObj;
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [viewMode, setViewMode] = useState('timeline');
+  const [filterDay, setFilterDay] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
   
   const days = useMemo(() => {
-    const d = new Set(events.map(e => e.day));
+    const d = new Set(events.map(e => safeStr(e.day).trim()));
     return Array.from(d).sort();
   }, [events]);
+
+  const filteredEvents = events.filter(e => {
+     const matchDay = filterDay === 'All' || safeStr(e.day).trim().toLowerCase() === filterDay.toLowerCase();
+     const matchSearch = safeStr(e.activity).toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         safeStr(e.lead).toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         safeStr(e.venue).toLowerCase().includes(searchTerm.toLowerCase());
+     return matchDay && matchSearch;
+  });
 
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
@@ -816,7 +1010,7 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
           count++;
         }
       });
-      alert(`Imported ${count} agenda items!`);
+      notify(`Imported ${count} agenda items!`, 'success');
     };
     reader.readAsText(file);
   };
@@ -828,40 +1022,51 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
-      <div className="p-8 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
+      <div className="p-8 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
         <div><h2 className="text-2xl font-black text-slate-800">Program Itinerary</h2><p className="text-slate-500">Scheduled Activities & Flow</p></div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+           <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
+             <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+             <input placeholder="Search activity..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+           </div>
+           <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-2">
+               <Filter size={14} className="text-slate-400 mr-2"/>
+               <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer">
+                   <option value="All">All Days</option>
+                   {days.map(d => <option key={d} value={d}>{d}</option>)}
+               </select>
+           </div>
            {isAdmin && (
              <>
                <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
-               <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden md:inline">Import</span></button>
-               <button onClick={() => exportToCSV(events, 'nid-program')} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden md:inline">Export</span></button>
+               <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
+               <button onClick={() => exportToCSV(events, 'nid-program', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
              </>
            )}
-           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2">
+           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => setViewMode('timeline')} className={`p-1.5 rounded-md transition-all ${viewMode === 'timeline' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Timeline View"><List size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
            </div>
-           {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={16}/> Add Activity</button>}
+           {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Add Activity</button>}
         </div>
       </div>
       
       {viewMode === 'timeline' ? (
         <div className="flex-1 overflow-auto p-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10">
-          {days.map(day => (
+          {(filterDay === 'All' ? days : [filterDay]).map(day => (
             <div key={day} className="space-y-6">
               <h3 className="text-xl font-black text-blue-900 border-b-2 border-blue-100 pb-2 flex items-center gap-2"><Calendar size={20}/>{safeStr(day)}</h3>
               <div className="space-y-6 border-l-2 border-slate-100 ml-3 pl-6">
-              {events.filter(e => e.day === day).sort((a,b)=>safeStr(a.time).localeCompare(safeStr(b.time))).map(e => (
+              {filteredEvents.filter(e => safeStr(e.day).trim() === day).sort((a,b)=>safeStr(a.time).localeCompare(safeStr(b.time))).map(e => (
                 <div key={e.id} className="relative group">
                     <div className={`absolute -left-[35px] top-1.5 w-4 h-4 rounded-full border-4 ${e.isHeader ? 'bg-blue-600 border-blue-200' : 'bg-white border-blue-500'}`}></div>
-                    <div className="text-[10px] font-bold text-blue-600 mb-1 tracking-widest bg-blue-50 inline-block px-2 py-0.5 rounded-md">{safeStr(e.time)}</div>
+                    <div className="text-[10px] font-bold text-blue-600 mb-1 tracking-widest bg-blue-50 inline-block px-2 py-0.5 rounded-md border border-blue-100">{safeStr(e.time)}</div>
                     <h4 className={`text-slate-800 ${e.isHeader ? 'font-black text-lg text-blue-900' : 'font-bold text-sm'}`}>{safeStr(e.activity)}</h4>
                     
                     {(e.lead || e.venue) && (
-                        <div className="flex flex-wrap gap-3 mt-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                            {e.lead && <span className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded"><Users size={10}/> {safeStr(e.lead)}</span>}
-                            {e.venue && <span className="flex items-center gap-1 bg-slate-50 px-2 py-1 rounded"><MapPin size={10}/> {safeStr(e.venue)}</span>}
+                        <div className="flex flex-wrap gap-2 mt-2">
+                            {e.lead && <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${getColorClass(e.lead)}`}><Users size={10}/> {safeStr(e.lead)}</span>}
+                            {e.venue && <span className="flex items-center gap-1 bg-slate-50 border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest"><MapPin size={10}/> {safeStr(e.venue)}</span>}
                         </div>
                     )}
                     {e.remarks && <p className="text-xs text-slate-500 mt-2 bg-yellow-50 border-l-2 border-yellow-300 pl-2 py-1 italic">{safeStr(e.remarks)}</p>}
@@ -885,22 +1090,22 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
               <tr><th className="p-4">Day & Time</th><th className="p-4">Activity</th><th className="p-4">Lead & Venue</th><th className="p-4">Remarks</th>{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {events.sort((a,b) => {
+              {filteredEvents.sort((a,b) => {
                  if(a.day === b.day) return safeStr(a.time).localeCompare(safeStr(b.time));
                  return safeStr(a.day).localeCompare(safeStr(b.day));
               }).map(e => (
                 <tr key={e.id} className={`hover:bg-slate-50/80 transition-colors group ${e.isHeader ? 'bg-blue-50/30' : ''}`}>
                   <td className="p-4 whitespace-nowrap">
                     <div className="font-bold text-slate-800">{safeStr(e.day)}</div>
-                    <div className="text-[10px] font-bold text-blue-600 tracking-widest mt-1 bg-blue-50 inline-block px-2 py-0.5 rounded-md">{safeStr(e.time)}</div>
+                    <div className="text-[10px] font-bold text-blue-600 tracking-widest mt-1 bg-blue-50 border border-blue-100 inline-block px-2 py-0.5 rounded-md">{safeStr(e.time)}</div>
                   </td>
                   <td className="p-4">
-                    <div className={`${e.isHeader ? 'font-black text-blue-900' : 'font-bold text-slate-800'}`}>{safeStr(e.activity)}</div>
+                    <div className={`${e.isHeader ? 'font-black text-blue-900 text-base' : 'font-bold text-slate-800'}`}>{safeStr(e.activity)}</div>
                   </td>
                   <td className="p-4">
-                    <div className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                      {e.lead && <span className="flex items-center gap-1"><Users size={10}/> {safeStr(e.lead)}</span>}
-                      {e.venue && <span className="flex items-center gap-1"><MapPin size={10}/> {safeStr(e.venue)}</span>}
+                    <div className="flex flex-col gap-1 items-start">
+                      {e.lead && <span className={`flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest border ${getColorClass(e.lead)}`}><Users size={10}/> {safeStr(e.lead)}</span>}
+                      {e.venue && <span className="flex items-center gap-1 bg-slate-50 border border-slate-200 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest mt-1"><MapPin size={10}/> {safeStr(e.venue)}</span>}
                     </div>
                   </td>
                   <td className="p-4">
@@ -951,7 +1156,15 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
                 <input name="venue" placeholder="Venue" defaultValue={editingItem?.venue} className="w-full p-3 border border-slate-200 rounded-xl outline-none font-medium"/>
               </div>
               <input name="activity" placeholder="Activity Name" defaultValue={editingItem?.activity} required className="w-full p-3 border border-slate-200 rounded-xl outline-none font-medium"/>
-              <input name="lead" placeholder="Lead Person / Team" defaultValue={editingItem?.lead} className="w-full p-3 border border-slate-200 rounded-xl outline-none font-medium"/>
+              
+              <div className="space-y-1">
+                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Assigned Lead / Focal</label>
+                 <select name="lead" defaultValue={editingItem?.lead || ""} className="w-full p-3 border border-slate-200 rounded-xl outline-none font-medium text-slate-700 bg-white">
+                    <option value="">No Lead Assigned</option>
+                    {teamMembers.map(tm => <option key={tm} value={tm}>{tm}</option>)}
+                 </select>
+              </div>
+
               {isAdmin && <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-3 border border-slate-200 rounded-xl outline-none font-medium bg-slate-50 text-slate-700"/>}
               <div className="flex gap-2 pt-4">
                 <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg">Save</button>
@@ -965,12 +1178,24 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
 };
 
 // --- COMPONENT: SPEAKER MANAGER ---
-const SpeakerManager = ({ dataObj, isAdmin }) => {
+const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
   const { data: speakers = [], add, update, remove } = dataObj;
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [viewMode, setViewMode] = useState('board');
+  const [filterDay, setFilterDay] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+
+  const filteredSpeakers = speakers.filter(s => {
+      const matchDay = filterDay === 'All' || safeStr(s.assignedDay || 'Day 1').trim().toLowerCase() === filterDay.toLowerCase();
+      const matchStatus = filterStatus === 'All' || safeStr(s.status).trim().toLowerCase() === filterStatus.toLowerCase();
+      const matchSearch = safeStr(s.name).toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          safeStr(s.org).toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          safeStr(s.role).toLowerCase().includes(searchTerm.toLowerCase());
+      return matchDay && matchStatus && matchSearch;
+  });
 
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
@@ -998,7 +1223,7 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
           count++;
         }
       });
-      alert(`Imported ${count} speakers!`);
+      notify(`Imported ${count} speakers!`, 'success');
     };
     reader.readAsText(file);
   };
@@ -1010,29 +1235,52 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
          <div><h2 className="text-3xl font-black text-slate-800">Speakers & VIPs</h2><p className="text-slate-500">Total VIPs: {speakers.length}</p></div>
-         <div className="flex flex-wrap gap-2">
+         <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
+                <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+                <input placeholder="Search VIPs..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+            </div>
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
+                <Filter size={14} className="text-slate-400 mr-2"/>
+                <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[100px]">
+                    <option value="All">All Days</option>
+                    {SPEAKER_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+            </div>
+            
+            {viewMode === 'table' && (
+                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
+                    <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[100px]">
+                        <option value="All">All Status</option>
+                        <option value="Invited">Invited</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Declined">Declined</option>
+                    </select>
+                </div>
+            )}
+
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden md:inline">Import</span></button>
-                <button onClick={() => exportToCSV(speakers, 'nid-speakers')} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden md:inline">Export</span></button>
+                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
+                <button onClick={() => exportToCSV(speakers, 'nid-speakers', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
               </>
             )}
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
-               <button onClick={() => setViewMode('board')} className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Board View"><Columns size={16}/></button>
+               <button onClick={() => {setViewMode('board'); setFilterStatus('All');}} className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Board View"><Columns size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
             </div>
-            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add VIP</button>}
+            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add VIP</button>}
          </div>
       </div>
       
       {viewMode === 'board' ? (
         <div className="flex-1 overflow-x-auto pb-6">
           <div className="flex gap-6 h-full min-w-[1200px]">
-            {SPEAKER_DAYS.map(day => {
-              const columnSpeakers = speakers.filter(s => (s.assignedDay || 'Day 1') === day).sort((a,b) => (a.order || 0) - (b.order || 0));
+            {(filterDay === 'All' ? SPEAKER_DAYS : [filterDay]).map(day => {
+              const columnSpeakers = filteredSpeakers.filter(s => safeStr(s.assignedDay || 'Day 1').trim() === day).sort((a,b) => (a.order || 0) - (b.order || 0));
               
               return (
               <div key={day} 
@@ -1054,7 +1302,7 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
                     <span>{day}</span>
                     <span className="bg-white px-2 py-0.5 rounded-full border shadow-sm">{columnSpeakers.length}</span>
                  </div>
-                 <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+                 <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
                     {columnSpeakers.map(s => (
                       <div key={s.id} 
                            draggable={isAdmin} 
@@ -1077,7 +1325,9 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
 
                               update(draggedId, { assignedDay: day, order: newOrder ?? Date.now() });
                            }}
-                           className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 relative group transition-all ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-xl hover:border-blue-300' : ''}`}>
+                           className={`bg-white p-4 rounded-2xl shadow-sm flex flex-col gap-3 relative group transition-all 
+                                      ${safeStr(s.status).trim() === 'Confirmed' ? 'border-2 border-green-200' : safeStr(s.status).trim() === 'Declined' ? 'border border-red-200' : 'border border-slate-200'}
+                                      ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1' : ''}`}>
                           
                           {isAdmin && (
                               <div className="absolute top-2 right-2 flex gap-1 opacity-0 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -1091,9 +1341,9 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
                                   {s.photo ? (
                                       <img src={s.photo} alt={s.name} className="w-12 h-12 rounded-full border-2 border-slate-100 object-cover bg-slate-50" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=e0e7ff&color=4f46e5`; }} />
                                   ) : (
-                                      <div className="w-12 h-12 bg-gradient-to-br from-indigo-50 to-purple-50 text-indigo-500 rounded-full flex items-center justify-center font-black text-lg border-2 border-indigo-100">{safeStr(s.name).charAt(0)}</div>
+                                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-black text-lg border ${getColorClass(s.name)}`}>{safeStr(s.name).charAt(0)}</div>
                                   )}
-                                  <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${s.status === 'Confirmed' ? 'bg-green-500' : s.status === 'Declined' ? 'bg-red-500' : 'bg-slate-300'}`} title={`Status: ${s.status}`}></div>
+                                  <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${safeStr(s.status).trim() === 'Confirmed' ? 'bg-green-500' : safeStr(s.status).trim() === 'Declined' ? 'bg-red-500' : 'bg-slate-300'}`} title={`Status: ${s.status}`}></div>
                               </div>
                               <div className="flex-1 min-w-0 pointer-events-none">
                                   <h4 className="font-bold text-slate-800 text-sm truncate leading-tight">{safeStr(s.name)}</h4>
@@ -1114,10 +1364,12 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
 
                           <div className="flex items-center justify-between pt-2 border-t border-slate-50 mt-1 gap-2">
                               <span className="text-[9px] font-bold bg-slate-50 text-slate-500 px-2 py-1.5 rounded-md border border-slate-100 flex-1 truncate text-center" title={s.assignment}>{safeStr(s.assignment)}</span>
-                              <select value={s.status} onChange={(e) => update(s.id, { status: e.target.value })}
+                              <select value={safeStr(s.status).trim() || 'Invited'} onChange={(e) => update(s.id, { status: e.target.value })}
                                   className={`text-[9px] font-black uppercase tracking-widest px-2 py-1.5 rounded-md border outline-none cursor-pointer transition-colors w-24 text-center shrink-0
-                                  ${s.status === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-700' : s.status === 'Declined' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
-                                  <option>Invited</option><option>Confirmed</option><option>Declined</option>
+                                  ${safeStr(s.status).trim() === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-700' : safeStr(s.status).trim() === 'Declined' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                                  <option value="Invited">Invited</option>
+                                  <option value="Confirmed">Confirmed</option>
+                                  <option value="Declined">Declined</option>
                               </select>
                           </div>
                       </div>
@@ -1134,13 +1386,13 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
               <tr><th className="p-4">Speaker</th><th className="p-4">Institution & Country</th><th className="p-4">Assignment</th><th className="p-4 w-40">RSVP Status</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {speakers.sort((a,b) => (a.order||0) - (b.order||0)).map(s => (
+              {filteredSpeakers.sort((a,b) => (a.order||0) - (b.order||0)).map(s => (
                 <tr key={s.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 flex items-center gap-3">
                     {s.photo ? (
                         <img src={s.photo} alt={s.name} className="w-10 h-10 rounded-full border object-cover shrink-0 bg-slate-50" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name)}&background=e0e7ff&color=4f46e5`; }} />
                     ) : (
-                        <div className="w-10 h-10 bg-indigo-50 text-indigo-400 rounded-full flex items-center justify-center font-black text-sm border shrink-0">{safeStr(s.name).charAt(0)}</div>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-sm border shrink-0 ${getColorClass(s.name)}`}>{safeStr(s.name).charAt(0)}</div>
                     )}
                     <div>
                       <div className="font-bold text-slate-800">{safeStr(s.name)}</div>
@@ -1158,10 +1410,12 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
                      <div className="text-[10px] font-bold text-slate-400">{s.assignedDay || 'Day 1'}</div>
                   </td>
                   <td className="p-4">
-                    <select value={s.status} onChange={(e) => update(s.id, { status: e.target.value })} 
+                    <select value={safeStr(s.status).trim() || 'Invited'} onChange={(e) => update(s.id, { status: e.target.value })} 
                         className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border outline-none cursor-pointer transition-colors w-full
-                        ${s.status === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-600' : s.status === 'Declined' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                        <option>Invited</option><option>Confirmed</option><option>Declined</option>
+                        ${safeStr(s.status).trim() === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-600' : safeStr(s.status).trim() === 'Declined' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                        <option value="Invited">Invited</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Declined">Declined</option>
                     </select>
                   </td>
                   {isAdmin && <td className="p-4 text-xs text-slate-500 italic max-w-[150px] truncate" title={s.remarks}>{s.remarks}</td>}
@@ -1200,7 +1454,7 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
              };
              if (editingItem) update(editingItem.id, data); else add(data);
              setShowModal(false);
-           }} className="bg-white p-8 rounded-3xl w-full max-w-md space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+           }} className="bg-white p-8 rounded-3xl w-full max-w-md space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
               <h3 className="text-xl font-bold">{editingItem ? 'Edit Speaker' : 'Add VIP Speaker'}</h3>
               
               <div className="space-y-3">
@@ -1241,8 +1495,8 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
               {isAdmin && <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>}
               
               <div className="flex gap-2 pt-4">
-                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg">Save</button>
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl">Cancel</button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-colors">Save</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
               </div>
            </form>
         </div>
@@ -1252,11 +1506,22 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
 };
 
 // --- COMPONENT: GUEST MANAGER ---
-const GuestManager = ({ attendeesObj, isAdmin }) => {
+const GuestManager = ({ attendeesObj, isAdmin, notify }) => {
   const { data: attendees = [], add, update, remove } = attendeesObj;
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
+  const [filterSector, setFilterSector] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+
+  const filteredAttendees = attendees.filter(g => {
+     const matchSector = filterSector === 'All' || safeStr(g.sector).trim().toLowerCase() === filterSector.toLowerCase();
+     const matchStatus = filterStatus === 'All' || safeStr(g.status).trim().toLowerCase() === filterStatus.toLowerCase();
+     const matchSearch = safeStr(g.name).toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         safeStr(g.org).toLowerCase().includes(searchTerm.toLowerCase());
+     return matchSector && matchStatus && matchSearch;
+  });
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -1278,7 +1543,7 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
             count++;
         }
       });
-      alert(`Imported ${count} guests!`);
+      notify(`Imported ${count} guests!`, 'success');
     };
     reader.readAsText(file);
   };
@@ -1290,18 +1555,37 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
 
   return (
     <div className="h-full flex flex-col gap-6 bg-white rounded-3xl border shadow-sm overflow-hidden">
-       <div className="p-6 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
+       <div className="p-6 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
           <div className="flex items-center gap-4">
             <h2 className="text-2xl font-black text-slate-800">Master Guest List</h2>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border shadow-sm">Total: {attendees.length}</div>
+            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border shadow-sm">Total: {filteredAttendees.length}</div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
+                <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+                <input placeholder="Search guests..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+            </div>
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
+                <Filter size={14} className="text-slate-400 mr-2"/>
+                <select value={filterSector} onChange={e => setFilterSector(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[120px] truncate">
+                    <option value="All">All Sectors</option>
+                    {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+            </div>
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
+                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[100px]">
+                    <option value="All">All Status</option>
+                    <option value="Invited">Invited</option>
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="Declined">Declined</option>
+                </select>
+            </div>
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleFileUpload}/>
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> Import</button>
-                <button onClick={() => exportToCSV(attendees, 'nid-guests')} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> Export</button>
-                <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2"><Plus size={16}/> Add Guest</button>
+                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
+                <button onClick={() => exportToCSV(attendees, 'nid-guests', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
+                <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Add Guest</button>
               </>
             )}
           </div>
@@ -1312,20 +1596,22 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
                 <tr><th className="p-5">Name / Organization</th><th className="p-5">Sector</th><th className="p-5 w-40">RSVP Status</th>{isAdmin && <th className="p-5">Remarks</th>}{isAdmin && <th className="p-5 w-24 text-right">Actions</th>}</tr>
              </thead>
              <tbody className="divide-y divide-slate-100">
-                {attendees.map(g => (
+                {filteredAttendees.map(g => (
                   <tr key={g.id} className="hover:bg-slate-50/80 transition-colors group">
                      <td className="p-5">
                        <div className="font-bold text-slate-800 text-base">{safeStr(g.name)}</div>
                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{safeStr(g.org)}</div>
                      </td>
                      <td className="p-5">
-                         <span className="bg-indigo-50 text-indigo-600 border border-indigo-100 px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest inline-block">{safeStr(g.sector)}</span>
+                         <span className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest inline-block border ${getColorClass(g.sector)}`}>{safeStr(g.sector)}</span>
                      </td>
                      <td className="p-5">
-                        <select value={g.status} onChange={(e) => update(g.id, { status: e.target.value })} 
+                        <select value={safeStr(g.status).trim() || 'Invited'} onChange={(e) => update(g.id, { status: e.target.value })} 
                             className={`text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-md border outline-none cursor-pointer w-full transition-colors
-                            ${g.status === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-600' : g.status === 'Declined' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                            <option>Invited</option><option>Confirmed</option><option>Declined</option>
+                            ${safeStr(g.status).trim() === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-600' : safeStr(g.status).trim() === 'Declined' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                            <option value="Invited">Invited</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Declined">Declined</option>
                         </select>
                      </td>
                      {isAdmin && <td className="p-5 text-xs text-slate-500 italic max-w-[150px] truncate" title={g.remarks}>{g.remarks}</td>}
@@ -1367,8 +1653,8 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
               </div>
               {isAdmin && <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>}
               <div className="flex gap-2 pt-4">
-                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700">Save</button>
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl">Cancel</button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-colors">Save</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
               </div>
            </form>
         </div>
@@ -1378,12 +1664,18 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
 };
 
 // --- COMPONENT: MEETING TRACKER ---
-const MeetingTracker = ({ dataObj, isAdmin }) => {
+const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
   const { data: meetings = [], add, update, remove } = dataObj;
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [viewMode, setViewMode] = useState('grid');
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef(null);
+
+  const filteredMeetings = meetings.filter(m => 
+      safeStr(m.title).toLowerCase().includes(searchTerm.toLowerCase()) || 
+      safeStr(m.date).includes(searchTerm)
+  );
 
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
@@ -1405,7 +1697,7 @@ const MeetingTracker = ({ dataObj, isAdmin }) => {
           count++;
         }
       });
-      alert(`Imported ${count} meetings!`);
+      notify(`Imported ${count} meetings!`, 'success');
     };
     reader.readAsText(file);
   };
@@ -1417,27 +1709,31 @@ const MeetingTracker = ({ dataObj, isAdmin }) => {
 
   return (
     <div className="bg-white rounded-3xl border shadow-sm h-full flex flex-col overflow-hidden">
-      <div className="p-8 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
+      <div className="p-8 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
         <div><h2 className="text-2xl font-black text-slate-800">Meeting Tracker</h2><p className="text-slate-500">Minutes & Attendance Log</p></div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
+                <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+                <input placeholder="Search title/date..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+            </div>
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> Import</button>
-                <button onClick={() => exportToCSV(meetings, 'nid-meetings')} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> Export</button>
+                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
+                <button onClick={() => exportToCSV(meetings, 'nid-meetings', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
               </>
             )}
             <div className="flex bg-white p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-slate-100 shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Grid View"><Grid size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-slate-100 shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
             </div>
-            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2"><Plus size={16}/> Log Meeting</button>}
+            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Log Meeting</button>}
         </div>
       </div>
       
       {viewMode === 'grid' ? (
         <div className="flex-1 overflow-auto p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {meetings.map(m => (
+           {filteredMeetings.map(m => (
              <div key={m.id} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all relative group flex flex-col">
               {isAdmin && (
                   <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1475,7 +1771,7 @@ const MeetingTracker = ({ dataObj, isAdmin }) => {
               <tr><th className="p-4">Date</th><th className="p-4">Meeting Title</th><th className="p-4">Attendees</th><th className="p-4">Minutes Link</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {meetings.sort((a,b) => new Date(b.date) - new Date(a.date)).map(m => (
+              {filteredMeetings.sort((a,b) => new Date(b.date) - new Date(a.date)).map(m => (
                 <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 whitespace-nowrap">
                     <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-md">{safeStr(m.date)}</span>
@@ -1527,8 +1823,8 @@ const MeetingTracker = ({ dataObj, isAdmin }) => {
               <input name="minutesLink" defaultValue={editingItem?.minutesLink} placeholder="URL Link to Minutes Document" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium text-blue-600"/>
               {isAdmin && <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>}
               <div className="flex gap-2 pt-4">
-                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700">Save</button>
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl">Cancel</button>
+                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-colors">Save</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
               </div>
            </form>
         </div>
@@ -1538,11 +1834,22 @@ const MeetingTracker = ({ dataObj, isAdmin }) => {
 };
 
 // --- COMPONENT: BUDGET MANAGER (Admin Only) ---
-const BudgetManager = ({ dataObj }) => {
+const BudgetManager = ({ dataObj, notify }) => {
     const { data: budget = [], add, update, remove } = dataObj;
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
+    const [filterStatus, setFilterStatus] = useState('All');
+    const [searchTerm, setSearchTerm] = useState('');
     const fileInputRef = useRef(null);
+
+    const filteredBudget = budget.filter(b => {
+        const matchStatus = filterStatus === 'All' || safeStr(b.status).trim().toLowerCase() === filterStatus.toLowerCase();
+        const matchSearch = safeStr(b.item).toLowerCase().includes(searchTerm.toLowerCase());
+        return matchStatus && matchSearch;
+    });
+
+    const totalSpent = filteredBudget.reduce((a, b) => a + Number(b.amount || 0), 0);
+    const overallSpent = budget.reduce((a, b) => a + Number(b.amount || 0), 0);
 
     const handleBulkUpload = (e) => {
         const file = e.target.files[0];
@@ -1563,7 +1870,7 @@ const BudgetManager = ({ dataObj }) => {
               count++;
             }
           });
-          alert(`Imported ${count} budget items!`);
+          notify(`Imported ${count} budget items!`, 'success');
         };
         reader.readAsText(file);
     };
@@ -1573,18 +1880,29 @@ const BudgetManager = ({ dataObj }) => {
         setShowModal(true);
     };
 
-    const totalSpent = budget.reduce((a, b) => a + Number(b.amount || 0), 0);
-
     return (
         <div className="h-full flex flex-col gap-6">
             <div className="bg-white rounded-3xl border shadow-sm flex-1 overflow-hidden flex flex-col">
-                <div className="p-8 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-50/50">
+                <div className="p-8 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
                     <div><h2 className="text-2xl font-black text-slate-800">Event Budget</h2><p className="text-slate-500">Financial Tracking (Admin Only)</p></div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
+                            <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
+                            <input placeholder="Search items..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+                        </div>
+                        <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-2">
+                            <Filter size={14} className="text-slate-400 mr-2"/>
+                            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer">
+                                <option value="All">All Statuses</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Paid">Paid</option>
+                            </select>
+                        </div>
                         <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
-                        <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> Import</button>
-                        <button onClick={() => exportToCSV(budget, 'nid-budget')} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> Export</button>
-                        <button onClick={() => openEditModal()} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={16}/> Add Expense</button>
+                        <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden md:inline">Import</span></button>
+                        <button onClick={() => exportToCSV(budget, 'nid-budget', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden md:inline">Export</span></button>
+                        <button onClick={() => openEditModal()} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-green-700 transition-colors"><Plus size={16}/> Add Expense</button>
                     </div>
                 </div>
                 
@@ -1593,7 +1911,7 @@ const BudgetManager = ({ dataObj }) => {
                         <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-200 shadow-sm relative overflow-hidden">
                             <div className="absolute right-0 top-0 opacity-10"><DollarSign size={100}/></div>
                             <div className="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2">Total Budget Allocation</div>
-                            <div className="text-4xl font-black text-green-900">₱{totalSpent.toLocaleString()}</div>
+                            <div className="text-4xl font-black text-green-900">₱{overallSpent.toLocaleString()}</div>
                         </div>
                     </div>
                 </div>
@@ -1604,7 +1922,7 @@ const BudgetManager = ({ dataObj }) => {
                             <tr><th className="p-4 rounded-tl-xl">Item / Expense</th><th className="p-4">Amount</th><th className="p-4">Status</th><th className="p-4 text-right rounded-tr-xl">Actions</th></tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {budget.map(b => (
+                            {filteredBudget.map(b => (
                                 <tr key={b.id} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="p-4 font-bold text-slate-800 text-base">
                                         {safeStr(b.item)}
@@ -1612,10 +1930,12 @@ const BudgetManager = ({ dataObj }) => {
                                     </td>
                                     <td className="p-4 font-black text-slate-700">₱{Number(b.amount || 0).toLocaleString()}</td>
                                     <td className="p-4">
-                                        <select value={b.status} onChange={(e) => update(b.id, { status: e.target.value })} 
+                                        <select value={safeStr(b.status).trim() || 'Pending'} onChange={(e) => update(b.id, { status: e.target.value })} 
                                             className={`text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-md border outline-none cursor-pointer transition-colors
-                                            ${b.status === 'Paid' ? 'bg-green-50 border-green-200 text-green-600' : b.status === 'Approved' ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-orange-50 border-orange-200 text-orange-600'}`}>
-                                            <option>Pending</option><option>Approved</option><option>Paid</option>
+                                            ${safeStr(b.status).trim() === 'Paid' ? 'bg-green-50 border-green-200 text-green-600' : safeStr(b.status).trim() === 'Approved' ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-orange-50 border-orange-200 text-orange-600'}`}>
+                                            <option value="Pending">Pending</option>
+                                            <option value="Approved">Approved</option>
+                                            <option value="Paid">Paid</option>
                                         </select>
                                     </td>
                                     <td className="p-4 text-right">
@@ -1650,12 +1970,14 @@ const BudgetManager = ({ dataObj }) => {
                         <input name="amount" defaultValue={editingItem?.amount} type="number" placeholder="Amount" required className="w-full p-4 pl-10 border border-slate-200 rounded-2xl outline-none font-black text-slate-700"/>
                     </div>
                     <select name="status" defaultValue={editingItem?.status || 'Pending'} className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-bold text-slate-600">
-                        <option>Pending</option><option>Approved</option><option>Paid</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Paid">Paid</option>
                     </select>
                     <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Notes / Remarks" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium"/>
                     <div className="flex gap-2 pt-4">
-                        <button type="submit" className="flex-1 bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700">Save</button>
-                        <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl">Cancel</button>
+                        <button type="submit" className="flex-1 bg-green-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-green-700 transition-colors">Save</button>
+                        <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
                     </div>
                 </form>
                 </div>
@@ -1665,7 +1987,7 @@ const BudgetManager = ({ dataObj }) => {
 };
 
 // --- SETTINGS PANEL ---
-const SettingsPanel = ({ onBackup, onReset }) => {
+const SettingsPanel = ({ onBackup, onReset, notify }) => {
   const [showConfirm, setShowConfirm] = useState(false);
   return (
     <div className="bg-white rounded-3xl border shadow-sm p-8 max-w-2xl mx-auto mt-10 relative">
@@ -1673,11 +1995,11 @@ const SettingsPanel = ({ onBackup, onReset }) => {
        <div className="space-y-6">
           <div className="p-6 rounded-2xl border border-blue-100 bg-blue-50/50 flex justify-between items-center">
              <div><h3 className="font-bold text-blue-900">System Backup</h3><p className="text-sm text-blue-700/70">Download a complete snapshot of all data.</p></div>
-             <button onClick={onBackup} className="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><Database size={18}/> Backup JSON</button>
+             <button onClick={onBackup} className="bg-blue-600 text-white px-5 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Database size={18}/> Backup JSON</button>
           </div>
           <div className="p-6 rounded-2xl border border-red-100 bg-red-50/50 flex justify-between items-center">
              <div><h3 className="font-bold text-red-900">Factory Reset</h3><p className="text-sm text-red-700/70">Wipe all current data. Cannot be undone.</p></div>
-             <button onClick={() => setShowConfirm(true)} className="bg-white border-2 border-red-100 text-red-600 px-5 py-3 rounded-xl font-bold flex items-center gap-2"><RotateCcw size={18}/> Reset System</button>
+             <button onClick={() => setShowConfirm(true)} className="bg-white border-2 border-red-100 text-red-600 px-5 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-red-50 transition-colors"><RotateCcw size={18}/> Reset System</button>
           </div>
        </div>
        {showConfirm && (
@@ -1688,13 +2010,13 @@ const SettingsPanel = ({ onBackup, onReset }) => {
                <p className="text-slate-500 text-sm mb-6">Enter admin password to confirm reset.</p>
                <form onSubmit={e => {
                   e.preventDefault();
-                  if(e.target.pwd.value === 'admin2026') { onReset(); setShowConfirm(false); }
-                  else alert('Incorrect password');
+                  if(e.target.pwd.value === 'admin2026') { onReset(); setShowConfirm(false); notify("System reset successful", "success"); }
+                  else notify("Incorrect password", "error");
                }}>
                   <input name="pwd" type="password" placeholder="Admin Password" autoFocus className="w-full p-4 border rounded-xl mb-4 outline-none font-bold"/>
                   <div className="flex gap-2">
-                     <button type="submit" className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg">Confirm Reset</button>
-                     <button type="button" onClick={() => setShowConfirm(false)} className="px-4 py-3 text-slate-500 font-bold">Cancel</button>
+                     <button type="submit" className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-red-700 transition-colors">Confirm Reset</button>
+                     <button type="button" onClick={() => setShowConfirm(false)} className="px-4 py-3 text-slate-500 font-bold transition-colors hover:text-slate-800">Cancel</button>
                   </div>
                </form>
             </div>
@@ -1705,15 +2027,16 @@ const SettingsPanel = ({ onBackup, onReset }) => {
 };
 
 // --- COMPONENT: RISKS ---
-const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin }) => {
-    const overdue = tasks.filter(t => t.status === 'Overdue');
+const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin, notify }) => {
+    // Overdue auto-detected globally via tasks array passed down
+    const overdue = tasks.filter(t => safeStr(t.status).trim() === 'Overdue');
     const [showModal, setShowModal] = useState(false);
 
     return (
         <div className="space-y-6 h-full overflow-y-auto pb-10">
             <div className="bg-red-50 border border-red-100 p-8 rounded-3xl shadow-sm flex justify-between items-center">
                 <h2 className="text-3xl font-black text-red-800 mb-2 flex items-center"><AlertTriangle className="mr-3" /> Risk Register</h2>
-                {isAdmin && <button onClick={() => setShowModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2"><Plus size={16}/> Add Manual Risk</button>}
+                {isAdmin && <button onClick={() => setShowModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-red-700 transition-colors"><Plus size={16}/> Add Manual Risk</button>}
             </div>
             
             {overdue.map(t => (
@@ -1742,12 +2065,13 @@ const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin }) => {
                     e.preventDefault();
                     setManualRisks({ name: e.target.name.value, desc: e.target.desc.value, type: 'Manual' });
                     setShowModal(false);
+                    notify("Risk added successfully", "success");
                 }} className="bg-white p-8 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl">
                     <h3 className="text-xl font-bold text-red-900">Add Manual Risk</h3>
                     <input name="name" placeholder="Risk Title" required className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium"/>
                     <input name="desc" placeholder="Description/Mitigation" required className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium"/>
-                    <button type="submit" className="w-full bg-red-600 text-white p-4 rounded-2xl font-black shadow-lg">Save Risk</button>
-                    <button type="button" onClick={()=>setShowModal(false)} className="w-full text-slate-500 p-2 font-bold hover:bg-slate-50 rounded-2xl">Cancel</button>
+                    <button type="submit" className="w-full bg-red-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-red-700 transition-colors">Save Risk</button>
+                    <button type="button" onClick={()=>setShowModal(false)} className="w-full text-slate-500 p-2 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
                 </form>
                 </div>
             )}
@@ -1758,9 +2082,9 @@ const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin }) => {
 // --- MAIN APP ---
 const App = () => {
   const [activeTab, setActiveTab] = useState('home');
-  // Defaulting to true so you can use the Add buttons immediately
   const [isAdmin, setIsAdmin] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // Initialize Data Hooks
   const tasksHook = useDataSync('tasks', INITIAL_TASKS);
@@ -1772,10 +2096,29 @@ const App = () => {
   const budgetHook = useDataSync('budget', INITIAL_BUDGET);
   const meetingsHook = useDataSync('meetings', INITIAL_MEETINGS);
 
+  // Auto-Detect Overdue Logic (Global Application to Tasks)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const globalProcessedTasks = useMemo(() => {
+     if(!tasksHook.data) return [];
+     return tasksHook.data.map(t => {
+         if (safeStr(t.status).trim() !== 'Complete' && t.endDate && t.endDate < todayStr) {
+             return { ...t, status: 'Overdue' };
+         }
+         return t;
+     });
+  }, [tasksHook.data, todayStr]);
+
+  // Notifications
+  const notify = (message, type = 'info') => {
+      setToast({ message, type });
+      setTimeout(() => setToast(null), 3000);
+  };
+
   // Derive team members for task assignment from the Org Chart data
   const teamMembers = useMemo(() => {
     if (!orgHook.data) return [];
-    const names = orgHook.data.map(m => m.name.split(' ')[0]);
+    // Only return distinct first+last names to populate dropdowns reliably
+    const names = orgHook.data.map(m => safeStr(m.name).trim());
     return [...new Set(names)].sort();
   }, [orgHook.data]);
 
@@ -1792,6 +2135,7 @@ const App = () => {
         timestamp: new Date().toISOString()
     };
     downloadBackup(allData);
+    notify("Backup downloaded successfully", "success");
   };
 
   const handleReset = () => {
@@ -1803,7 +2147,6 @@ const App = () => {
       risksHook.reset();
       budgetHook.reset();
       meetingsHook.reset();
-      alert("System has been reset to demo state.");
   };
 
   const menu = [
@@ -1823,10 +2166,13 @@ const App = () => {
   }
 
   return (
-    <div className="flex h-screen bg-[#f8fafc] font-sans text-slate-900 selection:bg-blue-100">
+    <div className="flex h-screen bg-[#f8fafc] font-sans text-slate-900 selection:bg-blue-100 overflow-hidden">
+      
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <div className="w-20 md:w-64 bg-[#0f172a] text-white flex flex-col shrink-0 transition-all duration-300 shadow-2xl z-20">
         <div className="p-8 font-black text-2xl tracking-tighter bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent cursor-pointer" onClick={()=>setActiveTab('home')}>NID 2026</div>
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar-dark">
            {menu.map(m => {
              const Icon = m.icon;
              return (
@@ -1838,7 +2184,7 @@ const App = () => {
            })}
         </nav>
         <div className="p-4 border-t border-slate-800/50">
-          <button onClick={() => isAdmin ? setIsAdmin(false) : setShowLogin(true)} className={`w-full p-4 rounded-2xl transition-all duration-200 flex items-center ${isAdmin ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
+          <button onClick={() => { if(isAdmin) { setIsAdmin(false); notify("Logged out of Admin mode"); } else setShowLogin(true); }} className={`w-full p-4 rounded-2xl transition-all duration-200 flex items-center ${isAdmin ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
              {isAdmin ? <Unlock size={18}/> : <Lock size={18}/>}
              <span className="hidden md:block ml-3 text-[10px] font-black uppercase tracking-widest">{isAdmin ? 'Logout' : 'Admin Access'}</span>
           </button>
@@ -1849,18 +2195,39 @@ const App = () => {
         {!isFirebaseConfigured && (
            <div className="bg-orange-500 text-white text-[10px] font-black tracking-widest text-center py-1.5 px-4 uppercase animate-pulse">Demo Mode: Connect Firebase Config in code for Live Sync</div>
         )}
-        <div className="flex-1 overflow-y-auto p-4 md:p-10 bg-slate-50/50">
-           <div className="max-w-7xl mx-auto h-full">
-              {activeTab === 'home' && <DashboardHome tasks={tasksHook.data} setActiveTab={setActiveTab} speakers={speakersHook.data} attendees={attendeesHook.data} />}
-              {activeTab === 'tasks' && <TaskManager dataObj={tasksHook} isAdmin={isAdmin} committees={INITIAL_COMMITTEES} teamMembers={teamMembers} />}
-              {activeTab === 'org' && <OrgChart dataObj={orgHook} isAdmin={isAdmin} />}
-              {activeTab === 'program' && <ProgramManager dataObj={programHook} isAdmin={isAdmin} />}
-              {activeTab === 'speakers' && <SpeakerManager dataObj={speakersHook} isAdmin={isAdmin} />}
-              {activeTab === 'guests' && <GuestManager attendeesObj={attendeesHook} isAdmin={isAdmin} />}
-              {activeTab === 'risks' && <Risks tasks={tasksHook.data} manualRisks={risksHook.data} setManualRisks={risksHook.add} isAdmin={isAdmin} />}
-              {activeTab === 'budget' && isAdmin && <BudgetManager dataObj={budgetHook} />}
-              {activeTab === 'meetings' && <MeetingTracker dataObj={meetingsHook} isAdmin={isAdmin} />}
-              {activeTab === 'settings' && isAdmin && <SettingsPanel onBackup={handleBackup} onReset={handleReset} />}
+        <div className="flex-1 overflow-y-auto p-4 md:p-10 bg-slate-50/50 custom-scrollbar">
+           <div className="max-w-7xl mx-auto h-full relative">
+              {/* Using block/hidden instead of conditional rendering to keep state (search terms, active filters) alive across tab switches! */}
+              <div className={`h-full ${activeTab === 'home' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <DashboardHome tasks={globalProcessedTasks} setActiveTab={setActiveTab} speakers={speakersHook.data} attendees={attendeesHook.data} budget={budgetHook.data} isAdmin={isAdmin} />
+              </div>
+              <div className={`h-full ${activeTab === 'tasks' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <TaskManager dataObj={{...tasksHook, data: globalProcessedTasks}} isAdmin={isAdmin} committees={INITIAL_COMMITTEES} teamMembers={teamMembers} notify={notify}/>
+              </div>
+              <div className={`h-full ${activeTab === 'org' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <OrgChart dataObj={orgHook} isAdmin={isAdmin} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'program' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <ProgramManager dataObj={programHook} teamMembers={teamMembers} isAdmin={isAdmin} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'speakers' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <SpeakerManager dataObj={speakersHook} isAdmin={isAdmin} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'guests' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <GuestManager attendeesObj={attendeesHook} isAdmin={isAdmin} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'meetings' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <MeetingTracker dataObj={meetingsHook} isAdmin={isAdmin} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'risks' ? 'block animate-fade-in' : 'hidden'}`}>
+                  <Risks tasks={globalProcessedTasks} manualRisks={risksHook.data} setManualRisks={risksHook.add} isAdmin={isAdmin} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'budget' && isAdmin ? 'block animate-fade-in' : 'hidden'}`}>
+                  <BudgetManager dataObj={budgetHook} notify={notify} />
+              </div>
+              <div className={`h-full ${activeTab === 'settings' && isAdmin ? 'block animate-fade-in' : 'hidden'}`}>
+                  <SettingsPanel onBackup={handleBackup} onReset={handleReset} notify={notify} />
+              </div>
            </div>
         </div>
       </main>
@@ -1873,8 +2240,8 @@ const App = () => {
               <h2 className="text-3xl font-black mb-2 text-slate-800 tracking-tight text-center">Admin Access</h2>
               <form onSubmit={(e) => {
                  e.preventDefault();
-                 if(e.target.password.value === 'admin2026') { setIsAdmin(true); setShowLogin(false); }
-                 else alert('Incorrect password');
+                 if(e.target.password.value === 'admin2026') { setIsAdmin(true); setShowLogin(false); notify("Logged in as Admin", "success"); }
+                 else notify('Incorrect password', 'error');
               }} className="space-y-4">
                  <input type="password" name="password" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold text-lg" placeholder="Enter password" autoFocus/>
                  <button className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl hover:bg-blue-700 transition-all">Authenticate</button>
