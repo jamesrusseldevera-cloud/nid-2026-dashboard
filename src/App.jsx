@@ -17,19 +17,25 @@ import {
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 
 // --- CONFIGURATION & INITIALIZATION ---
-const firebaseConfig = {
-  apiKey: "AIzaSyDrNI40ZxqPiqMXqGYd__PxsPjAYBEg8xU",
-  authDomain: "nid-2026.firebaseapp.com",
-  projectId: "nid-2026",
-  storageBucket: "nid-2026.firebasestorage.app",
-  messagingSenderId: "1015576349659",
-  appId: "1:1015576349659:web:58bca689b4a6d7e0a635fe"
-};;
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: "AIzaSyDrNI40ZxqPiqMXqGYd__PxsPjAYBEg8xU",
+      authDomain: "nid-2026.firebaseapp.com",
+      projectId: "nid-2026",
+      storageBucket: "nid-2026.firebasestorage.app",
+      messagingSenderId: "1015576349659",
+      appId: "1:1015576349659:web:58bca689b4a6d7e0a635fe"
+    };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'nid-2026-dashboard';
+
+// FIX: Sanitize the appId by stripping any injected filepaths.
+// This guarantees exact matching with Firebase security rules to prevent permission errors.
+const appId = typeof __app_id !== 'undefined' ? String(__app_id).split('/')[0] : 'default-app-id';
 
 // --- INITIAL DATA CONSTANTS ---
 const INITIAL_COMMITTEES = [ "Executive Committee", "Programs", "Admin and Coordination", "Procurement and Logistics", "Media and Publicity", "Filipinnovation Awards" ];
@@ -38,6 +44,38 @@ const SPEAKER_DAYS = ["TBD", "Day 0", "Day 1", "Day 2"];
 const SPEAKER_ASSIGNMENTS = ["TBD", "Keynote Speaker", "Opening Remarks", "Closing Remarks", "RTD 1", "RTD 2", "RTD 3", "Panel Speaker", "Message of Support", "Others"];
 
 // --- UTILITIES ---
+const exportToCSV = (data, filename) => {
+  if (!data || !data.length) return;
+  const headers = Object.keys(data[0]).filter(k => k !== 'id' && k !== 'createdAt');
+  const rows = data.map(row => 
+    headers.map(h => {
+      let val = row[h];
+      if (Array.isArray(val)) val = val.join(', ');
+      return `"${String(val || '').replace(/"/g, '""')}"`;
+    }).join(",")
+  );
+  const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `${filename}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+const parseCSV = (text) => {
+  const lines = text.split('\n').filter(l => l.trim());
+  if (lines.length === 0) return [];
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = values[i]);
+    return obj;
+  });
+};
+
 const safeStr = (val) => {
   if (val === null || val === undefined) return "";
   if (typeof val === 'object' && !Array.isArray(val)) return "[Object]";
@@ -242,8 +280,39 @@ const TaskBoard = ({ dataObj, isAdmin, committees }) => {
   const [view, setView] = useState('board');
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // useMemo for filtering prevents expensive recalculations on every render
+  // CSV Upload Handler
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = parseCSV(event.target.result);
+      let count = 0;
+      csvData.forEach(row => {
+        const name = row['Task Name'] || row['Task'] || row['Name'];
+        if (name) {
+          const assigneesRaw = row['Assigned To'] || row['Assignee'] || row['Owner'] || '';
+          const assigneesArr = assigneesRaw.split(',').map(a => a.trim()).filter(a => a);
+          add({
+            name: name,
+            assignedTo: assigneesArr.length > 0 ? assigneesArr : ['Unassigned'],
+            committee: row['Committee'] || row['Team'] || 'General',
+            status: row['Status'] || 'Not Started',
+            priority: row['Priority'] || 'Medium',
+            startDate: row['Start Date'] || row['Start'] || '',
+            endDate: row['End Date'] || row['Due Date'] || row['End'] || ''
+          });
+          count++;
+        }
+      });
+      alert(`Imported ${count} tasks successfully!`);
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
+
   const filtered = useMemo(() => tasks.filter(t => 
     safeStr(t.name).toLowerCase().includes(search.toLowerCase()) || 
     safeStr(t.committee).toLowerCase().includes(search.toLowerCase())
@@ -259,11 +328,20 @@ const TaskBoard = ({ dataObj, isAdmin, committees }) => {
            <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm">
              <Search size={16} className="text-slate-400 mr-2"/><input placeholder="Search tasks..." className="bg-transparent outline-none text-sm font-medium w-40" value={search} onChange={e => setSearch(e.target.value)}/>
            </div>
-           <div className="flex bg-slate-100 p-1 rounded-lg border">
+           <div className="flex bg-slate-100 p-1 rounded-lg border mr-1">
                <button onClick={() => setView('board')} className={`p-1.5 rounded-md ${view === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}><Columns size={16}/></button>
                <button onClick={() => setView('list')} className={`p-1.5 rounded-md ${view === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400'}`}><Table size={16}/></button>
            </div>
-           <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> New Task</button>
+           
+           {isAdmin && (
+             <div className="flex gap-2">
+               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload}/>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm" title="Import CSV"><Upload size={18}/></button>
+               <button onClick={() => exportToCSV(tasks, 'Tasks_Export')} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-green-600 transition-colors shadow-sm" title="Export CSV"><Download size={18}/></button>
+             </div>
+           )}
+
+           <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 ml-1"><Plus size={18}/> New Task</button>
         </div>
       </div>
 
@@ -292,9 +370,9 @@ const TaskBoard = ({ dataObj, isAdmin, committees }) => {
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex-1 overflow-y-auto">
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest border-b">
+            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 border-b">
               <tr>
                 <SortHeader label="Task Name" sortKey="name" sortConfig={sortConfig} onSort={requestSort} />
                 <SortHeader label="Committee" sortKey="committee" sortConfig={sortConfig} onSort={requestSort} />
@@ -310,7 +388,7 @@ const TaskBoard = ({ dataObj, isAdmin, committees }) => {
                   <td className="p-4 text-xs font-bold text-slate-500 uppercase">{t.committee}</td>
                   <td className="p-4"><span className="text-[10px] font-black uppercase px-2 py-1 bg-slate-100 rounded">{t.priority}</span></td>
                   <td className="p-4">
-                    <select value={t.status} onChange={e => update(t.id, { status: e.target.value })} className="bg-transparent border rounded px-2 py-1 text-[10px] font-bold uppercase">
+                    <select value={t.status} onChange={e => update(t.id, { status: e.target.value })} className="bg-transparent border rounded px-2 py-1 text-[10px] font-bold uppercase outline-none">
                       <option>Not Started</option><option>In Progress</option><option>Complete</option><option>Overdue</option>
                     </select>
                   </td>
@@ -355,6 +433,32 @@ const OrgChart = ({ dataObj, isAdmin }) => {
   const [viewMode, setViewMode] = useState('tree');
   const [showModal, setShowModal] = useState(false);
   const [filterLevel, setFilterLevel] = useState('All');
+  const fileInputRef = useRef(null);
+
+  // CSV Upload Handler
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = parseCSV(event.target.result);
+      let count = 0;
+      csvData.forEach(row => {
+        if (row.Name) {
+          add({
+            name: row.Name,
+            role: row.Role || '',
+            division: row.Division || '',
+            level: Number(row.Level) || 3
+          });
+          count++;
+        }
+      });
+      alert(`Imported ${count} members successfully!`);
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
 
   const filtered = useMemo(() => members.filter(m => 
     (filterLevel === 'All' || Number(m.level) === Number(filterLevel)) &&
@@ -377,11 +481,20 @@ const OrgChart = ({ dataObj, isAdmin }) => {
                <option value="3">Level 3</option><option value="4">Level 4</option>
                <option value="5">Level 5</option>
            </select>
-           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1">
+           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1 mr-1">
                <button onClick={() => setViewMode('tree')} className={`p-1.5 rounded-md ${viewMode === 'tree' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><Grid size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><Table size={16}/></button>
            </div>
-           <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add Member</button>
+           
+           {isAdmin && (
+             <div className="flex gap-2">
+               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload}/>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm" title="Import CSV"><Upload size={18}/></button>
+               <button onClick={() => exportToCSV(members, 'Org_Export')} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-green-600 transition-colors shadow-sm" title="Export CSV"><Download size={18}/></button>
+             </div>
+           )}
+
+           <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 ml-1"><Plus size={18}/> Add Member</button>
         </div>
       </div>
 
@@ -464,6 +577,32 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
   const { data: events, add, remove } = dataObj;
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // CSV Upload Handler
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = parseCSV(event.target.result);
+      let count = 0;
+      csvData.forEach(row => {
+        if (row.Activity) {
+          add({
+            day: row.Day || 'Day 1',
+            time: row.Time || '09:00',
+            activity: row.Activity,
+            venue: row.Venue || ''
+          });
+          count++;
+        }
+      });
+      alert(`Imported ${count} program events successfully!`);
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
 
   const filtered = useMemo(() => events.filter(e => safeStr(e.activity).toLowerCase().includes(search.toLowerCase()) || safeStr(e.venue).toLowerCase().includes(search.toLowerCase())), [events, search]);
   const { items: sorted, requestSort, sortConfig } = useSortableData(filtered);
@@ -473,9 +612,18 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
         <div><h2 className="text-3xl font-black text-slate-800">Program Itinerary</h2><p className="text-slate-500">Event schedule and venues</p></div>
         <div className="flex items-center gap-2">
-           <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm">
+           <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm mr-1">
              <Search size={16} className="text-slate-400 mr-2"/><input placeholder="Search agenda..." className="bg-transparent outline-none text-sm font-medium w-40" value={search} onChange={e => setSearch(e.target.value)}/>
            </div>
+
+           {isAdmin && (
+             <div className="flex gap-2 mr-1">
+               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload}/>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm" title="Import CSV"><Upload size={18}/></button>
+               <button onClick={() => exportToCSV(events, 'Program_Export')} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-green-600 transition-colors shadow-sm" title="Export CSV"><Download size={18}/></button>
+             </div>
+           )}
+
            <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add Event</button>
         </div>
       </div>
@@ -526,6 +674,35 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [showModal, setShowModal] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // CSV Upload Handler
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = parseCSV(event.target.result);
+      let count = 0;
+      csvData.forEach(row => {
+        if (row.Name) {
+          add({
+            name: row.Name,
+            role: row.Role || '',
+            org: row.Organization || row.Org || '',
+            photo: row.Photo || '',
+            assignedDay: row['Assigned Day'] || row.Day || 'TBD',
+            assignment: row.Assignment || 'TBD',
+            status: 'Invited'
+          });
+          count++;
+        }
+      });
+      alert(`Imported ${count} VIPs successfully!`);
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
 
   const filtered = useMemo(() => speakers.filter(s => safeStr(s.name).toLowerCase().includes(search.toLowerCase()) || safeStr(s.org).toLowerCase().includes(search.toLowerCase())), [speakers, search]);
   const { items: sorted, requestSort, sortConfig } = useSortableData(filtered);
@@ -538,10 +715,19 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
            <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm">
              <Search size={16} className="text-slate-400 mr-2"/><input placeholder="Search VIPs..." className="bg-transparent outline-none text-sm font-medium w-32" value={search} onChange={e => setSearch(e.target.value)}/>
            </div>
-           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1 shadow-sm">
+           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1 shadow-sm mr-1">
                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><Grid size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><Table size={16}/></button>
            </div>
+           
+           {isAdmin && (
+             <div className="flex gap-2 mr-1">
+               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload}/>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm" title="Import CSV"><Upload size={18}/></button>
+               <button onClick={() => exportToCSV(speakers, 'Speakers_Export')} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-green-600 transition-colors shadow-sm" title="Export CSV"><Download size={18}/></button>
+             </div>
+           )}
+
            <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add VIP</button>
         </div>
       </div>
@@ -676,10 +862,36 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
   );
 };
 
-const BudgetManager = ({ dataObj }) => {
+const BudgetManager = ({ dataObj, isAdmin }) => {
   const { data: items, add, update, remove } = dataObj;
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // CSV Upload Handler
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = parseCSV(event.target.result);
+      let count = 0;
+      csvData.forEach(row => {
+        const itemDesc = row['Item Description'] || row.Item;
+        if (itemDesc) {
+          add({
+            item: itemDesc,
+            amount: Number(row.Amount) || 0,
+            status: row.Status || 'Pending'
+          });
+          count++;
+        }
+      });
+      alert(`Imported ${count} budget items successfully!`);
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
 
   const filtered = useMemo(() => items.filter(i => safeStr(i.item).toLowerCase().includes(search.toLowerCase())), [items, search]);
   const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -690,9 +902,18 @@ const BudgetManager = ({ dataObj }) => {
        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
         <div><h2 className="text-3xl font-black text-slate-800">Event Budget</h2><p className="text-slate-500">Total Estimated: ₱{total.toLocaleString()}</p></div>
         <div className="flex items-center gap-2">
-           <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm">
+           <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm mr-1">
              <Search size={16} className="text-slate-400 mr-2"/><input placeholder="Search items..." className="bg-transparent outline-none text-sm font-medium w-40" value={search} onChange={e => setSearch(e.target.value)}/>
            </div>
+           
+           {isAdmin && (
+             <div className="flex gap-2 mr-1">
+               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload}/>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm" title="Import CSV"><Upload size={18}/></button>
+               <button onClick={() => exportToCSV(items, 'Budget_Export')} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-green-600 transition-colors shadow-sm" title="Export CSV"><Download size={18}/></button>
+             </div>
+           )}
+
            <button onClick={() => setShowModal(true)} className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> New Expense</button>
         </div>
       </div>
@@ -743,6 +964,32 @@ const GuestList = ({ dataObj, isAdmin, sectors }) => {
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'analytics'
   const [showModal, setShowModal] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // CSV Upload Handler
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvData = parseCSV(event.target.result);
+      let count = 0;
+      csvData.forEach(row => {
+        if (row.Name) {
+          add({
+            name: row.Name,
+            org: row.Org || row.Organization || '',
+            sector: row.Sector || 'Other',
+            status: 'Invited'
+          });
+          count++;
+        }
+      });
+      alert(`Imported ${count} guests successfully!`);
+    };
+    reader.readAsText(file);
+    e.target.value = null; // reset
+  };
 
   const filtered = useMemo(() => guests.filter(g => safeStr(g.name).toLowerCase().includes(search.toLowerCase()) || safeStr(g.org).toLowerCase().includes(search.toLowerCase())), [guests, search]);
   const { items: sorted, requestSort, sortConfig } = useSortableData(filtered);
@@ -772,10 +1019,19 @@ const GuestList = ({ dataObj, isAdmin, sectors }) => {
            <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm">
              <Search size={16} className="text-slate-400 mr-2"/><input placeholder="Search guests..." className="bg-transparent outline-none text-sm font-medium w-40" value={search} onChange={e => setSearch(e.target.value)}/>
            </div>
-           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1 shadow-sm">
+           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1 shadow-sm mr-1">
                <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><List size={16}/></button>
                <button onClick={() => setViewMode('analytics')} className={`p-1.5 rounded-md ${viewMode === 'analytics' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><PieChart size={16}/></button>
            </div>
+           
+           {isAdmin && (
+             <div className="flex gap-2 mr-1">
+               <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileUpload}/>
+               <button onClick={() => fileInputRef.current?.click()} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 transition-colors shadow-sm" title="Import CSV"><Upload size={18}/></button>
+               <button onClick={() => exportToCSV(guests, 'Guests_Export')} className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-green-600 transition-colors shadow-sm" title="Export CSV"><Download size={18}/></button>
+             </div>
+           )}
+
            <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add Guest</button>
         </div>
       </div>
@@ -878,24 +1134,37 @@ const App = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
 
-  // Initial Auth Lifecycle (Rule 3)
+  // Initial Auth Lifecycle
   useEffect(() => {
+    let isMounted = true;
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
+          try {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } catch (tokenErr) {
+            console.warn("Custom token failed, falling back to anonymous:", tokenErr);
+            await signInAnonymously(auth);
+          }
         } else {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        console.error("Auth failed:", err);
+        console.error("Auth completely failed:", err);
       }
     };
     initAuth();
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
+    
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      if (isMounted) {
+        setUser(u);
+        setAuthLoading(false);
+      }
     });
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   // Sync Hooks
@@ -905,7 +1174,6 @@ const App = () => {
   const orgHook = useDataSync('org', user);
   const programHook = useDataSync('program', user);
   const budgetHook = useDataSync('budget', user);
-  // Add meetingsHook back if needed, currently using dummy verify text per last version logic
   const meetingsHook = useDataSync('meetings', user);
 
   const menu = [
@@ -956,7 +1224,7 @@ const App = () => {
           {activeTab === 'guests' && <GuestList dataObj={guestsHook} isAdmin={isAdmin} sectors={SECTORS} />}
           {activeTab === 'program' && <ProgramManager dataObj={programHook} isAdmin={isAdmin} />}
           {activeTab === 'speakers' && <SpeakerManager dataObj={speakersHook} isAdmin={isAdmin} />}
-          {activeTab === 'budget' && isAdmin && <BudgetManager dataObj={budgetHook} />}
+          {activeTab === 'budget' && isAdmin && <BudgetManager dataObj={budgetHook} isAdmin={isAdmin} />}
           {/* Implementation for meetings tab following the same pattern */}
           {['meetings', 'settings'].includes(activeTab) && (
             <div className="h-full flex items-center justify-center text-slate-300 font-bold italic bg-slate-100/50 rounded-[3rem] border-4 border-dashed">
