@@ -17,7 +17,9 @@ import {
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 
 // --- CONFIGURATION & INITIALIZATION ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
+const isCanvasEnv = typeof __firebase_config !== 'undefined' || typeof __app_id !== 'undefined';
+
+const firebaseConfig = isCanvasEnv 
   ? JSON.parse(__firebase_config) 
   : {
       apiKey: "AIzaSyDrNI40ZxqPiqMXqGYd__PxsPjAYBEg8xU",
@@ -33,27 +35,26 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// FIX 1: Bulletproof App ID Extractor
-// Parses the auth token directly to guarantee the path matches server permissions exactly.
+// Bulletproof App ID Extractor (Only used in Canvas)
 let extractedAppId = 'default-app-id';
-try {
-  if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-    const base64Url = __initial_auth_token.split('.')[1];
-    if (base64Url) {
-      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const pad = base64.length % 4;
-      const paddedBase64 = pad ? base64 + '='.repeat(4 - pad) : base64;
-      const payload = JSON.parse(atob(paddedBase64));
-      extractedAppId = payload.app_id || payload.appId || extractedAppId;
+if (isCanvasEnv) {
+  try {
+    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+      const base64Url = __initial_auth_token.split('.')[1];
+      if (base64Url) {
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const pad = base64.length % 4;
+        const paddedBase64 = pad ? base64 + '='.repeat(4 - pad) : base64;
+        const payload = JSON.parse(atob(paddedBase64));
+        extractedAppId = payload.app_id || payload.appId || extractedAppId;
+      }
     }
+  } catch (e) {
+    console.warn("Token parsing skipped, relying on fallback.", e);
   }
-} catch (e) {
-  console.warn("Token parsing skipped, relying on fallback.", e);
-}
-
-// Fallback if token doesn't contain the app_id claim
-if (extractedAppId === 'default-app-id' && typeof __app_id !== 'undefined') {
-  extractedAppId = String(__app_id).split('/')[0].replace(/_src$/, '');
+  if (extractedAppId === 'default-app-id' && typeof __app_id !== 'undefined') {
+    extractedAppId = String(__app_id).split('/')[0].replace(/_src$/, '');
+  }
 }
 const appId = extractedAppId;
 
@@ -102,7 +103,7 @@ const safeStr = (val) => {
   return String(val);
 };
 
-// --- CUSTOM HOOKS (Optimized for Fast Loading) ---
+// --- CUSTOM HOOKS (Optimized for Fast Loading & Vercel) ---
 const useSortableData = (items, config = null) => {
   const [sortConfig, setSortConfig] = useState(config);
 
@@ -140,12 +141,21 @@ const useDataSync = (collectionName, user) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Vercel / GitHub vs Canvas DB Path Routing
+  const getColRef = () => isCanvasEnv 
+    ? collection(db, 'artifacts', appId, 'public', 'data', collectionName)
+    : collection(db, collectionName);
+
+  const getDocRef = (id) => isCanvasEnv
+    ? doc(db, 'artifacts', appId, 'public', 'data', collectionName, id)
+    : doc(db, collectionName, id);
+
   useEffect(() => {
-    if (!user) return;
-    // Rule 1: Strict Paths
-    const dataRef = collection(db, 'artifacts', appId, 'public', 'data', collectionName);
-    const unsubscribe = onSnapshot(query(dataRef), (snapshot) => {
-      setData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    // If in canvas, require user token to load. On Vercel, attempt immediately.
+    if (isCanvasEnv && !user) return;
+    
+    const unsubscribe = onSnapshot(query(getColRef()), (snapshot) => {
+      setData(snapshot.docs.map(d => ({ ...d.data(), id: d.id })));
       setLoading(false);
     }, (err) => {
       console.error(`Sync error (${collectionName}):`, err);
@@ -154,7 +164,6 @@ const useDataSync = (collectionName, user) => {
     return () => unsubscribe();
   }, [collectionName, user]);
 
-  // FIX 2: Data Sanitization to prevent Firestore crashes from undefined/null formData values
   const cleanData = (obj) => {
     const cleaned = {};
     for (const [key, value] of Object.entries(obj)) {
@@ -164,10 +173,9 @@ const useDataSync = (collectionName, user) => {
   };
 
   const add = async (item) => {
-    if (!user) return;
+    if (isCanvasEnv && !user) return;
     try {
-      const dataRef = collection(db, 'artifacts', appId, 'public', 'data', collectionName);
-      await addDoc(dataRef, { ...cleanData(item), createdAt: new Date().toISOString() });
+      await addDoc(getColRef(), { ...cleanData(item), createdAt: new Date().toISOString() });
     } catch (err) {
       console.error(`Failed to add to ${collectionName}:`, err);
       alert(`Could not save item: ${err.message}`);
@@ -175,10 +183,9 @@ const useDataSync = (collectionName, user) => {
   };
 
   const update = async (id, updates) => {
-    if (!user) return;
+    if (isCanvasEnv && !user) return;
     try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
-      await updateDoc(docRef, cleanData(updates));
+      await updateDoc(getDocRef(id), cleanData(updates));
     } catch (err) {
       console.error(`Failed to update ${collectionName}:`, err);
       alert(`Could not update item: ${err.message}`);
@@ -186,10 +193,9 @@ const useDataSync = (collectionName, user) => {
   };
 
   const remove = async (id) => {
-    if (!user) return;
+    if (isCanvasEnv && !user) return;
     try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
-      await deleteDoc(docRef);
+      await deleteDoc(getDocRef(id));
     } catch (err) {
       console.error(`Failed to delete from ${collectionName}:`, err);
       alert(`Could not delete item: ${err.message}`);
@@ -1201,6 +1207,7 @@ const App = () => {
             await signInAnonymously(auth);
           }
         } else {
+          // Normal Vercel execution (or fallback)
           await signInAnonymously(auth);
         }
       } catch (err) {
@@ -1245,7 +1252,7 @@ const App = () => {
     menu.push({ id: 'settings', icon: Settings, label: 'Settings' });
   }
 
-  if (authLoading) return (
+  if (authLoading && isCanvasEnv) return (
     <div className="h-screen bg-slate-900 flex items-center justify-center">
       <RefreshCw className="text-blue-500 animate-spin" size={40}/>
     </div>
