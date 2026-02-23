@@ -17,16 +17,14 @@ import {
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "firebase/auth";
 
 // --- CONFIGURATION & INITIALIZATION ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDrNI40ZxqPiqMXqGYd__PxsPjAYBEg8xU",
   authDomain: "nid-2026.firebaseapp.com",
   projectId: "nid-2026",
   storageBucket: "nid-2026.firebasestorage.app",
   messagingSenderId: "1015576349659",
   appId: "1:1015576349659:web:58bca689b4a6d7e0a635fe"
-};
+};;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
