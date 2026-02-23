@@ -33,9 +33,29 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// FIX: Sanitize the appId by stripping any injected filepaths.
-// This guarantees exact matching with Firebase security rules to prevent permission errors.
-const appId = typeof __app_id !== 'undefined' ? String(__app_id).split('/')[0] : 'default-app-id';
+// FIX 1: Bulletproof App ID Extractor
+// Parses the auth token directly to guarantee the path matches server permissions exactly.
+let extractedAppId = 'default-app-id';
+try {
+  if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+    const base64Url = __initial_auth_token.split('.')[1];
+    if (base64Url) {
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const pad = base64.length % 4;
+      const paddedBase64 = pad ? base64 + '='.repeat(4 - pad) : base64;
+      const payload = JSON.parse(atob(paddedBase64));
+      extractedAppId = payload.app_id || payload.appId || extractedAppId;
+    }
+  }
+} catch (e) {
+  console.warn("Token parsing skipped, relying on fallback.", e);
+}
+
+// Fallback if token doesn't contain the app_id claim
+if (extractedAppId === 'default-app-id' && typeof __app_id !== 'undefined') {
+  extractedAppId = String(__app_id).split('/')[0].replace(/_src$/, '');
+}
+const appId = extractedAppId;
 
 // --- INITIAL DATA CONSTANTS ---
 const INITIAL_COMMITTEES = [ "Executive Committee", "Programs", "Admin and Coordination", "Procurement and Logistics", "Media and Publicity", "Filipinnovation Awards" ];
@@ -80,16 +100,6 @@ const safeStr = (val) => {
   if (val === null || val === undefined) return "";
   if (typeof val === 'object' && !Array.isArray(val)) return "[Object]";
   return String(val);
-};
-
-const getDuration = (start, end) => {
-    if (!start || !end) return 0;
-    const s = new Date(start);
-    const e = new Date(end);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
-    const diff = e - s;
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days >= 0 ? days : 0;
 };
 
 // --- CUSTOM HOOKS (Optimized for Fast Loading) ---
@@ -144,22 +154,46 @@ const useDataSync = (collectionName, user) => {
     return () => unsubscribe();
   }, [collectionName, user]);
 
+  // FIX 2: Data Sanitization to prevent Firestore crashes from undefined/null formData values
+  const cleanData = (obj) => {
+    const cleaned = {};
+    for (const [key, value] of Object.entries(obj)) {
+      cleaned[key] = (value === undefined || value === null) ? '' : value;
+    }
+    return cleaned;
+  };
+
   const add = async (item) => {
     if (!user) return;
-    const dataRef = collection(db, 'artifacts', appId, 'public', 'data', collectionName);
-    await addDoc(dataRef, { ...item, createdAt: new Date().toISOString() });
+    try {
+      const dataRef = collection(db, 'artifacts', appId, 'public', 'data', collectionName);
+      await addDoc(dataRef, { ...cleanData(item), createdAt: new Date().toISOString() });
+    } catch (err) {
+      console.error(`Failed to add to ${collectionName}:`, err);
+      alert(`Could not save item: ${err.message}`);
+    }
   };
 
   const update = async (id, updates) => {
     if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
-    await updateDoc(docRef, updates);
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
+      await updateDoc(docRef, cleanData(updates));
+    } catch (err) {
+      console.error(`Failed to update ${collectionName}:`, err);
+      alert(`Could not update item: ${err.message}`);
+    }
   };
 
   const remove = async (id) => {
     if (!user) return;
-    const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
-    await deleteDoc(docRef);
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', collectionName, id);
+      await deleteDoc(docRef);
+    } catch (err) {
+      console.error(`Failed to delete from ${collectionName}:`, err);
+      alert(`Could not delete item: ${err.message}`);
+    }
   };
 
   return { data, add, update, remove, loading };
@@ -412,7 +446,8 @@ const TaskBoard = ({ dataObj, isAdmin, committees }) => {
             endDate: fd.get('end'),
             assignedTo: []
           };
-          add(item); setShowModal(false);
+          add(item); 
+          setShowModal(false);
         }} className="space-y-4">
           <input name="name" placeholder="Task Name" required className="w-full p-4 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-medium"/>
           <select name="committee" className="w-full p-4 border rounded-2xl outline-none font-medium">{committees.map(c => <option key={c}>{c}</option>)}</select>
@@ -553,7 +588,12 @@ const OrgChart = ({ dataObj, isAdmin }) => {
         <form onSubmit={e => {
           e.preventDefault();
           const fd = new FormData(e.target);
-          add({ name: fd.get('name'), role: fd.get('role'), division: fd.get('division'), level: Number(fd.get('level')) });
+          add({ 
+            name: fd.get('name'), 
+            role: fd.get('role'), 
+            division: fd.get('division'), 
+            level: Number(fd.get('level')) 
+          });
           setShowModal(false);
         }} className="space-y-4">
           <input name="name" placeholder="Name" required className="w-full p-4 border rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-medium"/>
@@ -655,7 +695,12 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
         <form onSubmit={e => {
           e.preventDefault();
           const fd = new FormData(e.target);
-          add({ day: fd.get('day'), time: fd.get('time'), activity: fd.get('activity'), venue: fd.get('venue') });
+          add({ 
+            day: fd.get('day'), 
+            time: fd.get('time'), 
+            activity: fd.get('activity'), 
+            venue: fd.get('venue') 
+          });
           setShowModal(false);
         }} className="space-y-4">
           <input name="day" placeholder="e.g. Day 1" required className="w-full p-4 border rounded-2xl outline-none font-medium"/>
@@ -829,7 +874,7 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
               name: fd.get('name'), 
               org: fd.get('org'), 
               role: fd.get('role'), 
-              photo: fd.get('photo') || '',
+              photo: fd.get('photo'),
               status: 'Invited',
               assignedDay: fd.get('assignedDay'),
               assignment: fd.get('assignment')
@@ -947,7 +992,11 @@ const BudgetManager = ({ dataObj, isAdmin }) => {
         <form onSubmit={e => {
           e.preventDefault();
           const fd = new FormData(e.target);
-          add({ item: fd.get('item'), amount: Number(fd.get('amount')), status: 'Pending' });
+          add({ 
+            item: fd.get('item'), 
+            amount: Number(fd.get('amount')), 
+            status: 'Pending' 
+          });
           setShowModal(false);
         }} className="space-y-4">
           <input name="item" placeholder="Expense Description" required className="w-full p-4 border rounded-2xl outline-none font-medium"/>
@@ -1113,7 +1162,12 @@ const GuestList = ({ dataObj, isAdmin, sectors }) => {
         <form onSubmit={e => {
           e.preventDefault();
           const fd = new FormData(e.target);
-          add({ name: fd.get('name'), org: fd.get('org'), sector: fd.get('sector'), status: 'Invited' });
+          add({ 
+            name: fd.get('name'), 
+            org: fd.get('org'), 
+            sector: fd.get('sector'), 
+            status: 'Invited' 
+          });
           setShowModal(false);
         }} className="space-y-4">
           <input name="name" placeholder="Name" required className="w-full p-4 border rounded-2xl outline-none font-medium"/>
