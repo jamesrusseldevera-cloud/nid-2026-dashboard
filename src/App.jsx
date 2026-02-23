@@ -162,6 +162,83 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 // --- FEATURE COMPONENTS ---
+const DashboardHome = ({ tasksHook, speakersHook, guestsHook }) => {
+  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0 });
+
+  useEffect(() => {
+    const target = new Date("2026-04-28T00:00:00");
+    const interval = setInterval(() => {
+      const diff = target - new Date();
+      if (diff <= 0) return clearInterval(interval);
+      setTimeLeft({ 
+        days: Math.floor(diff / 86400000), 
+        hours: Math.floor((diff / 3600000) % 24), 
+        minutes: Math.floor((diff / 60000) % 60) 
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const totalTasks = tasksHook.data.length;
+  const completedTasks = tasksHook.data.filter(t => t.status === 'Complete').length;
+  const overdueTasks = tasksHook.data.filter(t => t.status === 'Overdue').length;
+  const confirmedSpeakers = speakersHook.data.filter(s => s.status === 'Confirmed').length;
+  const confirmedGuests = guestsHook.data.filter(g => g.status === 'Confirmed').length;
+
+  return (
+    <div className="space-y-8 animate-fade-in pb-10">
+      <div className="bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 p-8 md:p-12 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
+            <div>
+              <h1 className="text-4xl md:text-5xl font-black mb-2 tracking-tighter">AGOS ASEAN Dashboard</h1>
+              <p className="text-blue-400 text-xl font-bold italic tracking-tight">AI for Growth, Opportunity, and Sustainability</p>
+            </div>
+            <div className="flex gap-4">
+                {['days', 'hours', 'minutes'].map(unit => (
+                    <div key={unit} className="bg-white/10 backdrop-blur-md rounded-2xl p-4 text-center min-w-[90px] border border-white/10">
+                        <div className="text-3xl font-black">{timeLeft[unit] || 0}</div>
+                        <div className="text-[10px] uppercase tracking-widest font-bold opacity-60">{unit}</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+        <div className="relative z-10 flex flex-wrap gap-4 mt-8">
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 min-w-[140px]">
+                <div className="text-3xl font-black">{totalTasks > 0 ? Math.round((completedTasks/totalTasks)*100) : 0}%</div>
+                <div className="text-[10px] uppercase font-bold opacity-60 tracking-widest">Task Completion</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 min-w-[140px]">
+                <div className="text-3xl font-black text-purple-400">{confirmedSpeakers}</div>
+                <div className="text-[10px] uppercase font-bold opacity-60 tracking-widest">VIPs Confirmed</div>
+            </div>
+            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 min-w-[140px]">
+                <div className="text-3xl font-black text-green-400">{confirmedGuests}</div>
+                <div className="text-[10px] uppercase font-bold opacity-60 tracking-widest">Guests Confirmed</div>
+            </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+         <div className="bg-white p-6 rounded-3xl border shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-orange-50 text-orange-500 rounded-2xl"><Clock size={28}/></div>
+            <div><div className="text-2xl font-black text-slate-800">{totalTasks - completedTasks}</div><div className="text-[10px] font-black text-slate-400 uppercase">Pending Items</div></div>
+         </div>
+         <div className="bg-white p-6 rounded-3xl border shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-red-50 text-red-500 rounded-2xl"><AlertCircle size={28}/></div>
+            <div><div className="text-2xl font-black text-slate-800">{overdueTasks}</div><div className="text-[10px] font-black text-slate-400 uppercase">Critical / Overdue</div></div>
+         </div>
+         <div className="bg-white p-6 rounded-3xl border shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-blue-50 text-blue-500 rounded-2xl"><Users size={28}/></div>
+            <div><div className="text-2xl font-black text-slate-800">{confirmedGuests}</div><div className="text-[10px] font-black text-slate-400 uppercase">Confirmed Guests</div></div>
+         </div>
+         <div className="bg-white p-6 rounded-3xl border shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-purple-50 text-purple-500 rounded-2xl"><Mic2 size={28}/></div>
+            <div><div className="text-2xl font-black text-slate-800">{confirmedSpeakers}</div><div className="text-[10px] font-black text-slate-400 uppercase">Speakers Ready</div></div>
+         </div>
+      </div>
+    </div>
+  );
+};
+
 const TaskBoard = ({ dataObj, isAdmin, committees }) => {
   const { data: tasks, add, update, remove } = dataObj;
   const [view, setView] = useState('board');
@@ -808,26 +885,7 @@ const App = () => {
 
       <main className="flex-1 overflow-hidden p-4 md:p-10 relative">
         <div className="max-w-7xl mx-auto h-full flex flex-col">
-          {activeTab === 'home' && (
-            <div className="space-y-8 animate-fade-in">
-              <div className="bg-gradient-to-br from-blue-900 to-slate-900 p-12 rounded-[3rem] text-white shadow-2xl relative overflow-hidden">
-                <div className="relative z-10">
-                  <h1 className="text-5xl font-black mb-4 tracking-tighter">AGOS ASEAN Dashboard</h1>
-                  <p className="text-blue-400 text-xl font-bold italic">AI for Growth, Opportunity, and Sustainability</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-8 rounded-3xl border shadow-sm flex items-center gap-4">
-                  <div className="p-4 bg-orange-50 text-orange-500 rounded-2xl"><Clock size={28}/></div>
-                  <div><div className="text-2xl font-black">{tasksHook.data.filter(t => t.status === 'Overdue').length}</div><div className="text-[10px] font-black text-slate-400 uppercase">Overdue</div></div>
-                </div>
-                <div className="bg-white p-8 rounded-3xl border shadow-sm flex items-center gap-4">
-                  <div className="p-4 bg-green-50 text-green-500 rounded-2xl"><CheckCircle2 size={28}/></div>
-                  <div><div className="text-2xl font-black">{tasksHook.data.filter(t => t.status === 'Complete').length}</div><div className="text-[10px] font-black text-slate-400 uppercase">Completed</div></div>
-                </div>
-              </div>
-            </div>
-          )}
+          {activeTab === 'home' && <DashboardHome tasksHook={tasksHook} speakersHook={speakersHook} guestsHook={guestsHook} />}
           {activeTab === 'tasks' && <TaskBoard dataObj={tasksHook} isAdmin={isAdmin} committees={INITIAL_COMMITTEES} />}
           {activeTab === 'org' && <OrgChart dataObj={orgHook} isAdmin={isAdmin} />}
           {activeTab === 'guests' && <GuestList dataObj={guestsHook} isAdmin={isAdmin} sectors={SECTORS} />}
