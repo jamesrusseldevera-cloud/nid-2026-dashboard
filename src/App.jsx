@@ -494,8 +494,8 @@ const OrgChart = ({ dataObj, isAdmin }) => {
              e.preventDefault();
              const fd = new FormData(e.target);
              const data = { 
-                 name: fd.get('name'), role: fd.get('role'), division: fd.get('division'), 
-                 level: Number(fd.get('level')), remarks: fd.get('remarks') || '' 
+                 name: fd.get('name') || '', role: fd.get('role') || '', division: fd.get('division') || '', 
+                 level: Number(fd.get('level')) || 3, remarks: fd.get('remarks') || '' 
              };
              if (editingItem) update(editingItem.id, data); else add(data);
              setShowModal(false);
@@ -731,13 +731,13 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [] }) =>
                 e.preventDefault();
                 const fd = new FormData(e.target);
                 const item = {
-                  name: fd.get('name'),
+                  name: fd.get('name') || '',
                   assignedTo: selectedAssignees.length > 0 ? selectedAssignees : ['Unassigned'],
-                  committee: fd.get('committee'),
+                  committee: fd.get('committee') || '',
                   status: editingTask?.status || 'Not Started',
-                  priority: fd.get('priority'),
-                  startDate: fd.get('startDate'),
-                  endDate: fd.get('endDate'),
+                  priority: fd.get('priority') || 'Medium',
+                  startDate: fd.get('startDate') || '',
+                  endDate: fd.get('endDate') || '',
                   remarks: fd.get('remarks') || ''
                 };
                 if(editingTask) update(editingTask.id, item);
@@ -927,8 +927,8 @@ const ProgramManager = ({ dataObj, isAdmin }) => {
              e.preventDefault();
              const fd = new FormData(e.target);
              const data = { 
-                day: fd.get('day'), time: fd.get('time'), activity: fd.get('activity'), 
-                lead: fd.get('lead'), venue: fd.get('venue'), remarks: fd.get('remarks') || '',
+                day: fd.get('day') || '', time: fd.get('time') || '', activity: fd.get('activity') || '', 
+                lead: fd.get('lead') || '', venue: fd.get('venue') || '', remarks: fd.get('remarks') || '',
                 isHeader: fd.get('isHeader') === 'on'
              };
              if (editingItem) update(editingItem.id, data); else add(data);
@@ -1045,10 +1045,10 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
                       
                       let newOrder = 1000;
                       if (columnSpeakers.length > 0) {
-                          newOrder = (columnSpeakers[columnSpeakers.length - 1].order || 0) + 1000;
+                          newOrder = Number(columnSpeakers[columnSpeakers.length - 1].order || 0) + 1000;
                       }
                       
-                      update(id, { assignedDay: day, order: newOrder });
+                      update(id, { assignedDay: day, order: newOrder ?? Date.now() });
                    }}>
                  <div className="flex justify-between items-center mb-4 px-2 font-black text-slate-500 text-xs uppercase tracking-widest">
                     <span>{day}</span>
@@ -1069,13 +1069,13 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
                               const targetIndex = columnSpeakers.findIndex(sp => sp.id === s.id);
                               let newOrder;
                               if (targetIndex === 0) {
-                                  newOrder = (s.order || 0) - 1000;
+                                  newOrder = Number(s.order || 0) - 1000;
                               } else {
-                                  const prevOrder = columnSpeakers[targetIndex - 1].order || 0;
-                                  newOrder = (prevOrder + (s.order || 0)) / 2;
+                                  const prevOrder = Number(columnSpeakers[targetIndex - 1].order || 0);
+                                  newOrder = (prevOrder + Number(s.order || 0)) / 2;
                               }
 
-                              update(draggedId, { assignedDay: day, order: newOrder });
+                              update(draggedId, { assignedDay: day, order: newOrder ?? Date.now() });
                            }}
                            className={`bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3 relative group transition-all ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-xl hover:border-blue-300' : ''}`}>
                           
@@ -1186,11 +1186,17 @@ const SpeakerManager = ({ dataObj, isAdmin }) => {
              e.preventDefault();
              const fd = new FormData(e.target);
              const data = { 
-                name: fd.get('name'), role: fd.get('role'), org: fd.get('org'), 
-                country: fd.get('country'), photo: fd.get('photo'), email: fd.get('email'), 
-                assignedDay: fd.get('assignedDay'), assignment: fd.get('assignment'),
-                remarks: fd.get('remarks') || '', status: editingItem?.status || 'Invited',
-                order: editingItem ? editingItem.order : Date.now()
+                name: fd.get('name') || '', 
+                role: fd.get('role') || '', 
+                org: fd.get('org') || '', 
+                country: fd.get('country') || 'Philippines', 
+                photo: fd.get('photo') || '', 
+                email: fd.get('email') || '', 
+                assignedDay: fd.get('assignedDay') || 'Day 1', 
+                assignment: fd.get('assignment') || 'TBD',
+                remarks: fd.get('remarks') || '', 
+                status: editingItem?.status || 'Invited',
+                order: editingItem?.order ?? Date.now()
              };
              if (editingItem) update(editingItem.id, data); else add(data);
              setShowModal(false);
@@ -1343,8 +1349,8 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
              e.preventDefault();
              const fd = new FormData(e.target);
              const data = { 
-                 name: fd.get('name'), org: fd.get('org'), 
-                 sector: fd.get('sector'), remarks: fd.get('remarks') || '',
+                 name: fd.get('name') || '', org: fd.get('org') || '', 
+                 sector: fd.get('sector') || '', remarks: fd.get('remarks') || '',
                  status: editingItem?.status || 'Invited' 
              };
              if (editingItem) update(editingItem.id, data); else add(data);
@@ -1507,8 +1513,8 @@ const MeetingTracker = ({ dataObj, isAdmin }) => {
              e.preventDefault();
              const fd = new FormData(e.target);
              const data = { 
-                 date: fd.get('date'), title: fd.get('title'), 
-                 attendees: fd.get('attendees'), minutesLink: fd.get('minutesLink'),
+                 date: fd.get('date') || '', title: fd.get('title') || '', 
+                 attendees: fd.get('attendees') || '', minutesLink: fd.get('minutesLink') || '',
                  remarks: fd.get('remarks') || ''
              };
              if (editingItem) update(editingItem.id, data); else add(data);
@@ -1631,8 +1637,8 @@ const BudgetManager = ({ dataObj }) => {
                     e.preventDefault();
                     const fd = new FormData(e.target);
                     const data = { 
-                        item: fd.get('item'), amount: Number(fd.get('amount')), 
-                        status: fd.get('status'), remarks: fd.get('remarks') 
+                        item: fd.get('item') || '', amount: Number(fd.get('amount')) || 0, 
+                        status: fd.get('status') || 'Pending', remarks: fd.get('remarks') || ''
                     };
                     if (editingItem) update(editingItem.id, data); else add(data);
                     setShowModal(false);
@@ -1752,7 +1758,8 @@ const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin }) => {
 // --- MAIN APP ---
 const App = () => {
   const [activeTab, setActiveTab] = useState('home');
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Defaulting to true so you can use the Add buttons immediately
+  const [isAdmin, setIsAdmin] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
 
   // Initialize Data Hooks
