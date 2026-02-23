@@ -6,7 +6,7 @@ import {
   Search, List, Columns, Table, Download, Upload, 
   MapPin, Grid, Mail, Video, Link as LinkIcon, 
   Settings, Database, RotateCcw, CalendarClock, ArrowUp, ArrowDown, ArrowUpDown,
-  RefreshCw
+  RefreshCw, PieChart
 } from 'lucide-react';
 
 // --- FIREBASE IMPORTS ---
@@ -19,14 +19,14 @@ import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken }
 // --- CONFIGURATION & INITIALIZATION ---
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: "AIzaSyDrNI40ZxqPiqMXqGYd__PxsPjAYBEg8xU",
-      authDomain: "nid-2026.firebaseapp.com",
-      projectId: "nid-2026",
-      storageBucket: "nid-2026.firebasestorage.app",
-      messagingSenderId: "1015576349659",
-      appId: "1:1015576349659:web:58bca689b4a6d7e0a635fe"
-    };
+  : const firebaseConfig = {
+  apiKey: "AIzaSyDrNI40ZxqPiqMXqGYd__PxsPjAYBEg8xU",
+  authDomain: "nid-2026.firebaseapp.com",
+  projectId: "nid-2026",
+  storageBucket: "nid-2026.firebasestorage.app",
+  messagingSenderId: "1015576349659",
+  appId: "1:1015576349659:web:58bca689b4a6d7e0a635fe"
+};
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -743,51 +743,118 @@ const BudgetManager = ({ dataObj }) => {
 const GuestList = ({ dataObj, isAdmin, sectors }) => {
   const { data: guests, add, update, remove } = dataObj;
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'analytics'
   const [showModal, setShowModal] = useState(false);
 
   const filtered = useMemo(() => guests.filter(g => safeStr(g.name).toLowerCase().includes(search.toLowerCase()) || safeStr(g.org).toLowerCase().includes(search.toLowerCase())), [guests, search]);
   const { items: sorted, requestSort, sortConfig } = useSortableData(filtered);
 
+  // Compute Analytics Data
+  const stats = useMemo(() => {
+    const statusCounts = { Confirmed: 0, Invited: 0, Declined: 0 };
+    const sectorCounts = {};
+    
+    guests.forEach(g => {
+        if (statusCounts[g.status] !== undefined) statusCounts[g.status]++;
+        sectorCounts[g.sector] = (sectorCounts[g.sector] || 0) + 1;
+    });
+
+    const sectorArr = Object.entries(sectorCounts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+    return { status: statusCounts, sector: sectorArr, total: guests.length };
+  }, [guests]);
+
   return (
     <div className="h-full flex flex-col">
        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
-        <div><h2 className="text-3xl font-black text-slate-800">Guest List</h2><p className="text-slate-500">Confirmed: {guests.filter(g => g.status === 'Confirmed').length}</p></div>
+        <div><h2 className="text-3xl font-black text-slate-800">Guest List</h2><p className="text-slate-500">Confirmed: {stats.status.Confirmed} / {stats.total}</p></div>
         <div className="flex items-center gap-2">
            <div className="flex items-center px-3 py-2 bg-white border rounded-xl shadow-sm">
              <Search size={16} className="text-slate-400 mr-2"/><input placeholder="Search guests..." className="bg-transparent outline-none text-sm font-medium w-40" value={search} onChange={e => setSearch(e.target.value)}/>
            </div>
+           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 ml-1 shadow-sm">
+               <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><List size={16}/></button>
+               <button onClick={() => setViewMode('analytics')} className={`p-1.5 rounded-md ${viewMode === 'analytics' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}><PieChart size={16}/></button>
+           </div>
            <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2"><Plus size={18}/> Add Guest</button>
         </div>
       </div>
-      <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden flex-1 overflow-y-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b">
-            <tr>
-              <SortHeader label="Name & Org" sortKey="name" sortConfig={sortConfig} onSort={requestSort} />
-              <SortHeader label="Sector" sortKey="sector" sortConfig={sortConfig} onSort={requestSort} />
-              <SortHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={requestSort} />
-              {isAdmin && <th className="p-4 w-16"></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map(g => (
-              <tr key={g.id} className="hover:bg-slate-50 border-b last:border-0 transition-colors group">
-                <td className="p-5">
-                  <div className="font-bold text-slate-800">{g.name}</div>
-                  <div className="text-xs text-slate-400 font-bold uppercase">{g.org}</div>
-                </td>
-                <td className="p-5"><span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded text-[10px] font-black uppercase">{g.sector}</span></td>
-                <td className="p-5">
-                  <select value={g.status} onChange={e => update(g.id, { status: e.target.value })} className={`text-[10px] font-black uppercase px-3 py-1.5 rounded border ${g.status === 'Confirmed' ? 'bg-green-50 text-green-600' : 'bg-slate-50'}`}>
-                    <option>Invited</option><option>Confirmed</option><option>Declined</option>
-                  </select>
-                </td>
-                {isAdmin && <td className="p-5 text-right"><button onClick={() => remove(g.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button></td>}
+      
+      {viewMode === 'analytics' ? (
+        <div className="flex-1 overflow-y-auto space-y-6 pb-10">
+           {/* Status Overview Cards */}
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col justify-center">
+                 <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Total Confirmed</div>
+                 <div className="text-4xl font-black text-green-500 mb-2">{stats.status.Confirmed}</div>
+                 <div className="w-full bg-slate-100 rounded-full h-1.5"><div className="bg-green-500 h-1.5 rounded-full" style={{width: `${stats.total ? (stats.status.Confirmed / stats.total) * 100 : 0}%`}}></div></div>
+              </div>
+              <div className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col justify-center">
+                 <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Pending RSVPs</div>
+                 <div className="text-4xl font-black text-blue-500 mb-2">{stats.status.Invited}</div>
+                 <div className="w-full bg-slate-100 rounded-full h-1.5"><div className="bg-blue-500 h-1.5 rounded-full" style={{width: `${stats.total ? (stats.status.Invited / stats.total) * 100 : 0}%`}}></div></div>
+              </div>
+              <div className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col justify-center">
+                 <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Declined</div>
+                 <div className="text-4xl font-black text-slate-400 mb-2">{stats.status.Declined}</div>
+                 <div className="w-full bg-slate-100 rounded-full h-1.5"><div className="bg-slate-400 h-1.5 rounded-full" style={{width: `${stats.total ? (stats.status.Declined / stats.total) * 100 : 0}%`}}></div></div>
+              </div>
+           </div>
+
+           {/* Sector Bar Chart */}
+           <div className="bg-white p-8 rounded-3xl border shadow-sm">
+              <h3 className="font-bold text-slate-800 text-lg mb-6">Demographics by Sector</h3>
+              <div className="space-y-5">
+                 {stats.sector.length > 0 ? stats.sector.map(s => (
+                   <div key={s.name} className="relative">
+                     <div className="flex justify-between items-end mb-1">
+                       <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">{s.name}</span>
+                       <span className="text-sm font-black text-slate-800">{s.count} <span className="text-[10px] text-slate-400 font-bold ml-1">({Math.round((s.count/stats.total)*100)}%)</span></span>
+                     </div>
+                     <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                       <div className="bg-indigo-500 h-full rounded-full transition-all duration-1000 ease-out" style={{width: `${(s.count / stats.total) * 100}%`}}></div>
+                     </div>
+                   </div>
+                 )) : (
+                   <div className="text-center py-10 text-slate-400 font-bold text-sm">No guest data available.</div>
+                 )}
+              </div>
+           </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-[2rem] border shadow-sm overflow-hidden flex-1 overflow-y-auto">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b">
+              <tr>
+                <SortHeader label="Name & Org" sortKey="name" sortConfig={sortConfig} onSort={requestSort} />
+                <SortHeader label="Sector" sortKey="sector" sortConfig={sortConfig} onSort={requestSort} />
+                <SortHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={requestSort} />
+                {isAdmin && <th className="p-4 w-16"></th>}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {sorted.map(g => (
+                <tr key={g.id} className="hover:bg-slate-50 border-b last:border-0 transition-colors group">
+                  <td className="p-5">
+                    <div className="font-bold text-slate-800">{g.name}</div>
+                    <div className="text-xs text-slate-400 font-bold uppercase">{g.org}</div>
+                  </td>
+                  <td className="p-5"><span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded text-[10px] font-black uppercase">{g.sector}</span></td>
+                  <td className="p-5">
+                    <select value={g.status} onChange={e => update(g.id, { status: e.target.value })} className={`text-[10px] font-black uppercase px-3 py-1.5 rounded border ${g.status === 'Confirmed' ? 'bg-green-50 text-green-600' : 'bg-slate-50'}`}>
+                      <option>Invited</option><option>Confirmed</option><option>Declined</option>
+                    </select>
+                  </td>
+                  {isAdmin && <td className="p-5 text-right"><button onClick={() => remove(g.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Add Guest">
         <form onSubmit={e => {
           e.preventDefault();
