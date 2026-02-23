@@ -6,7 +6,7 @@ import {
   Search, BarChart3, Filter, List, Columns, Save, Wifi, WifiOff, Table,
   Download, Upload, FileText, MapPin, Image as ImageIcon, Grid, Mail,
   Video, Link as LinkIcon, PieChart as PieChartIcon, Settings, Database, RotateCcw,
-  CalendarClock, Hourglass, Bell, ChevronDown, ChevronUp
+  CalendarClock, Hourglass, Bell, ChevronDown, ChevronUp, ExternalLink, ArrowUpDown
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
@@ -179,6 +179,77 @@ const safeStr = (val) => {
   return String(val);
 };
 
+// --- SORTING UTILITY HOOK ---
+const useSortableData = (items, config = null) => {
+  const [sortConfig, setSortConfig] = useState(config);
+
+  const sortedItems = useMemo(() => {
+    let sortableItems = [...items];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        // Special Handling for Priority Levels
+        if (sortConfig.key === 'priority') {
+            const priorityMap = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
+            const aVal = priorityMap[a.priority] || 0;
+            const bVal = priorityMap[b.priority] || 0;
+            if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+            return 0;
+        }
+
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+        
+        if (Array.isArray(aVal)) aVal = aVal.join(', ');
+        if (Array.isArray(bVal)) bVal = bVal.join(', ');
+
+        aVal = safeStr(aVal).toLowerCase();
+        bVal = safeStr(bVal).toLowerCase();
+
+        // Check if numeric sorting is possible
+        const aNum = parseFloat(aVal);
+        const bNum = parseFloat(bVal);
+        if (!isNaN(aNum) && !isNaN(bNum) && aVal.match(/^-?\d+(\.\d+)?$/) && bVal.match(/^-?\d+(\.\d+)?$/)) {
+            if (aNum < bNum) return sortConfig.direction === 'ascending' ? -1 : 1;
+            if (aNum > bNum) return sortConfig.direction === 'ascending' ? 1 : -1;
+            return 0;
+        }
+
+        // String sorting
+        if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [items, sortConfig]);
+
+  const requestSort = (key) => {
+    let direction = 'ascending';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  return { items: sortedItems, requestSort, sortConfig };
+};
+
+const SortableHeader = ({ label, sortKey, currentSort, requestSort, className = "" }) => {
+    const isActive = currentSort?.key === sortKey;
+    return (
+        <th className={`p-4 cursor-pointer hover:bg-slate-200 transition-colors select-none group ${className}`} onClick={() => requestSort(sortKey)}>
+            <div className="flex items-center gap-2">
+                {label}
+                <span className={`text-slate-400 group-hover:text-blue-500 transition-colors ${isActive ? 'text-blue-600' : 'opacity-40'}`}>
+                    {isActive ? (currentSort.direction === 'ascending' ? <ChevronUp size={14} /> : <ChevronDown size={14} />) : <ArrowUpDown size={14} />}
+                </span>
+            </div>
+        </th>
+    );
+};
+
+
 // --- INITIAL DATA CONSTANTS ---
 const INITIAL_COMMITTEES = [ "Executive Committee", "Programs", "Admin and Coordination", "Procurement and Logistics", "Media and Publicity", "Filipinnovation Awards" ];
 
@@ -188,7 +259,8 @@ const SECTORS = [
   "Resource Speaker", "HABI Mentor"
 ];
 
-const SPEAKER_DAYS = ["Day 0", "Day 1", "Day 2 (Morning)", "Day 2 (Afternoon)"];
+// Added VIPs Only logging option 
+const SPEAKER_DAYS = ["Day 0", "Day 1", "Day 2 (Morning)", "Day 2 (Afternoon)", "VIPs Only"];
 const SPEAKER_ASSIGNMENTS = [
   "TBD", "Opening Remarks", "Closing Remarks", "Scene Setter", 
   "Panelist", "Moderator", "Message from the President", 
@@ -271,14 +343,26 @@ const Toast = ({ message, type, onClose }) => {
 const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = [], budget = [], isAdmin }) => {
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter(t => safeStr(t.status).trim() === 'Complete').length;
-  const overdueTasks = tasks.filter(t => safeStr(t.status).trim() === 'Overdue').length;
+  const overdueTasks = tasks.filter(t => safeStr(t.status).trim() === 'Overdue');
   const confirmedSpeakers = speakers.filter(s => safeStr(s.status).trim() === 'Confirmed').length;
-  const confirmedGuests = attendees.filter(a => safeStr(a.status).trim() === 'Confirmed').length;
+  
+  // Sectoral Confirmation Stats
+  const confirmedGuests = attendees.reduce((acc, curr) => {
+      if (curr.confirmed !== undefined) return acc + Number(curr.confirmed);
+      // Fallback for legacy itemized db items
+      return acc + (safeStr(curr.status).trim() === 'Confirmed' ? 1 : 0);
+  }, 0);
+
   const totalSpent = budget.reduce((a, b) => a + Number(b.amount || 0), 0);
   
   const todayStr = new Date().toISOString().split('T')[0];
   const dueTodayTasks = tasks.filter(t => t.endDate === todayStr && safeStr(t.status).trim() !== 'Complete');
   const criticalTasks = tasks.filter(t => (t.priority === 'Critical' || safeStr(t.status).trim() === 'Overdue') && safeStr(t.status).trim() !== 'Complete');
+
+  const overdueAssignees = useMemo(() => {
+      const names = overdueTasks.flatMap(t => Array.isArray(t.assignedTo) ? t.assignedTo : [t.assignedTo]);
+      return [...new Set(names.filter(n => n && n !== 'Unassigned'))];
+  }, [overdueTasks]);
 
   const [timeLeft, setTimeLeft] = useState({});
   useEffect(() => {
@@ -298,6 +382,23 @@ const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = []
 
   return (
     <div className="space-y-8 animate-fade-in pb-10">
+      
+      {overdueAssignees.length > 0 && (
+          <div className="bg-red-50 border border-red-200 text-red-800 p-4 md:p-6 rounded-3xl flex items-center shadow-lg relative z-10 animate-in slide-in-from-top-4">
+              <div className="bg-red-100 p-3 rounded-full mr-4 shrink-0 shadow-inner">
+                  <AlertCircle size={28} className="text-red-600" />
+              </div>
+              <div>
+                  <strong className="font-black block text-lg mb-1 leading-tight">Attention Required</strong>
+                  <div className="text-sm font-medium">
+                      The following team members have OVERDUE deliverables: 
+                      <span className="font-black ml-2 text-red-900 bg-red-200/50 px-2 py-0.5 rounded border border-red-300 shadow-sm">{overdueAssignees.join(', ')}</span>
+                  </div>
+              </div>
+              <button onClick={() => setActiveTab('tasks')} className="ml-auto bg-white border border-red-200 text-red-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest shadow-sm hover:bg-red-50 transition-colors shrink-0 hidden md:block">View Tasks</button>
+          </div>
+      )}
+
       <div className="bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 p-8 md:p-12 rounded-3xl text-white shadow-2xl relative overflow-hidden">
         <div className="relative z-10">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
@@ -422,7 +523,7 @@ const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = []
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
          {[
            { label: 'Pending Items', val: totalTasks - completedTasks, icon: Clock, color: 'text-orange-500', bg: 'bg-orange-50' },
-           { label: 'Critical / Overdue', val: overdueTasks, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
+           { label: 'Critical / Overdue', val: overdueTasks.length, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-50' },
            { label: 'Confirmed Guests', val: confirmedGuests, icon: Users, color: 'text-blue-500', bg: 'bg-blue-50' },
            { label: 'Speakers Confirmed', val: confirmedSpeakers, icon: Mic2, color: 'text-purple-500', bg: 'bg-purple-50' }
          ].map((stat, i) => {
@@ -496,6 +597,8 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                           safeStr(m.division).toLowerCase().includes(searchTerm.toLowerCase());
       return matchLevel && matchSearch;
   });
+
+  const { items: sortedMembers, requestSort, sortConfig } = useSortableData(filteredMembers, { key: 'level', direction: 'ascending' });
 
   return (
     <div className="space-y-6 h-full overflow-y-auto pb-10">
@@ -605,10 +708,17 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
         <div className="flex-1 overflow-auto bg-white rounded-2xl border border-slate-200 shadow-sm mt-4">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
-              <tr><th className="p-4">Name</th><th className="p-4">Role</th><th className="p-4">Division</th><th className="p-4 text-center">Level</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
+              <tr>
+                <SortableHeader label="Name" sortKey="name" currentSort={sortConfig} requestSort={requestSort} />
+                <SortableHeader label="Role" sortKey="role" currentSort={sortConfig} requestSort={requestSort} />
+                <SortableHeader label="Division" sortKey="division" currentSort={sortConfig} requestSort={requestSort} />
+                <SortableHeader label="Level" sortKey="level" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+                {isAdmin && <th className="p-4">Remarks</th>}
+                {isAdmin && <th className="p-4 text-right">Actions</th>}
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredMembers.sort((a,b) => a.level - b.level).map(m => (
+              {sortedMembers.map(m => (
                 <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 font-bold text-slate-800 flex items-center gap-3">
                     {m.photo ? (
@@ -694,11 +804,13 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
   const columns = ['Not Started', 'In Progress', 'Complete', 'Overdue'];
 
   const filteredTasks = tasks.filter(t => {
-    const matchSearch = safeStr(t.name).toLowerCase().includes(safeStr(searchTerm).toLowerCase()) || safeStr(t.committee).toLowerCase().includes(safeStr(searchTerm).toLowerCase());
+    const matchSearch = safeStr(t.name).toLowerCase().includes(safeStr(searchTerm).toLowerCase()) || safeStr(t.committee).toLowerCase().includes(safeStr(searchTerm).toLowerCase()) || safeStr(t.assignedTo).toLowerCase().includes(safeStr(searchTerm).toLowerCase());
     const matchCom = filterCommittee === 'All' || safeStr(t.committee).trim().toLowerCase() === filterCommittee.toLowerCase();
     const matchStat = filterStatus === 'All' || safeStr(t.status).trim().toLowerCase() === filterStatus.toLowerCase();
     return matchSearch && matchCom && matchStat;
   });
+
+  const { items: sortedTasks, requestSort, sortConfig } = useSortableData(filteredTasks);
 
   const handleDragStart = (e, id) => e.dataTransfer.setData('taskId', id);
   const handleDrop = (e, status) => {
@@ -860,10 +972,17 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
         <div className="flex-1 overflow-auto bg-white rounded-2xl border border-slate-200 shadow-sm mb-6">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
-              <tr><th className="p-4">Task Name & Committee</th><th className="p-4">Assigned To</th><th className="p-4">Priority & Duration</th><th className="p-4 w-40">Status</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
+              <tr>
+                 <SortableHeader label="Task Name" sortKey="name" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Assigned To" sortKey="assignedTo" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Priority" sortKey="priority" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Status" sortKey="status" currentSort={sortConfig} requestSort={requestSort} className="w-40" />
+                 {isAdmin && <th className="p-4">Remarks</th>}
+                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredTasks.map(t => (
+              {sortedTasks.map(t => (
                 <tr key={t.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4">
                     <div className="font-bold text-slate-800">{safeStr(t.name)}</div>
@@ -988,6 +1107,8 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
      return matchDay && matchSearch;
   });
 
+  const { items: sortedEvents, requestSort, sortConfig } = useSortableData(filteredEvents, { key: 'time', direction: 'ascending' });
+
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1087,13 +1208,16 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
         <div className="flex-1 overflow-auto bg-white rounded-b-3xl">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
-              <tr><th className="p-4">Day & Time</th><th className="p-4">Activity</th><th className="p-4">Lead & Venue</th><th className="p-4">Remarks</th>{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
+              <tr>
+                 <SortableHeader label="Day & Time" sortKey="time" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Activity" sortKey="activity" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Lead" sortKey="lead" currentSort={sortConfig} requestSort={requestSort} />
+                 <th className="p-4">Remarks</th>
+                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredEvents.sort((a,b) => {
-                 if(a.day === b.day) return safeStr(a.time).localeCompare(safeStr(b.time));
-                 return safeStr(a.day).localeCompare(safeStr(b.day));
-              }).map(e => (
+              {sortedEvents.map(e => (
                 <tr key={e.id} className={`hover:bg-slate-50/80 transition-colors group ${e.isHeader ? 'bg-blue-50/30' : ''}`}>
                   <td className="p-4 whitespace-nowrap">
                     <div className="font-bold text-slate-800">{safeStr(e.day)}</div>
@@ -1197,6 +1321,8 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
       return matchDay && matchStatus && matchSearch;
   });
 
+  const { items: sortedSpeakers, requestSort, sortConfig } = useSortableData(filteredSpeakers, { key: 'name', direction: 'ascending' });
+
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1244,7 +1370,7 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
             </div>
             <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
                 <Filter size={14} className="text-slate-400 mr-2"/>
-                <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[100px]">
+                <select value={filterDay} onChange={e => setFilterDay(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[120px] truncate">
                     <option value="All">All Days</option>
                     {SPEAKER_DAYS.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
@@ -1278,7 +1404,7 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
       
       {viewMode === 'board' ? (
         <div className="flex-1 overflow-x-auto pb-6">
-          <div className="flex gap-6 h-full min-w-[1200px]">
+          <div className="flex gap-6 h-full min-w-[1400px]">
             {(filterDay === 'All' ? SPEAKER_DAYS : [filterDay]).map(day => {
               const columnSpeakers = filteredSpeakers.filter(s => safeStr(s.assignedDay || 'Day 1').trim() === day).sort((a,b) => (a.order || 0) - (b.order || 0));
               
@@ -1383,10 +1509,17 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
         <div className="flex-1 overflow-auto bg-white rounded-3xl border border-slate-200 shadow-sm mb-10">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
-              <tr><th className="p-4">Speaker</th><th className="p-4">Institution & Country</th><th className="p-4">Assignment</th><th className="p-4 w-40">RSVP Status</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
+              <tr>
+                 <SortableHeader label="Speaker Name" sortKey="name" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Institution / Org" sortKey="org" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Assignment" sortKey="assignment" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Status" sortKey="status" currentSort={sortConfig} requestSort={requestSort} className="w-40" />
+                 {isAdmin && <th className="p-4">Remarks</th>}
+                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredSpeakers.sort((a,b) => (a.order||0) - (b.order||0)).map(s => (
+              {sortedSpeakers.map(s => (
                 <tr key={s.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 flex items-center gap-3">
                     {s.photo ? (
@@ -1505,160 +1638,105 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
   );
 };
 
-// --- COMPONENT: GUEST MANAGER ---
-const GuestManager = ({ attendeesObj, isAdmin, notify }) => {
-  const { data: attendees = [], add, update, remove } = attendeesObj;
-  const [showModal, setShowModal] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [filterSector, setFilterSector] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [searchTerm, setSearchTerm] = useState('');
-  const fileInputRef = useRef(null);
+// --- COMPONENT: GUEST MANAGER (Sectoral View) ---
+const GuestManager = ({ attendeesObj, isAdmin }) => {
+  const { data: attendees = [], add, update } = attendeesObj;
+  
+  // Aggregate sectoral data robustly (handles both new structure and legacy itemized lists)
+  const sectorData = SECTORS.map(sector => {
+      // Find if we already saved an aggregate sector document
+      const existing = attendees.find(a => a.sector === sector && a.target !== undefined);
+      
+      // Fallback for calculating legacy itemized attendees
+      const legacyInvited = attendees.filter(a => a.sector === sector && a.target === undefined).length;
+      const legacyConfirmed = attendees.filter(a => a.sector === sector && safeStr(a.status).trim() === 'Confirmed' && a.target === undefined).length;
 
-  const filteredAttendees = attendees.filter(g => {
-     const matchSector = filterSector === 'All' || safeStr(g.sector).trim().toLowerCase() === filterSector.toLowerCase();
-     const matchStatus = filterStatus === 'All' || safeStr(g.status).trim().toLowerCase() === filterStatus.toLowerCase();
-     const matchSearch = safeStr(g.name).toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         safeStr(g.org).toLowerCase().includes(searchTerm.toLowerCase());
-     return matchSector && matchStatus && matchSearch;
+      return existing || { 
+          id: `temp-${sector}`, 
+          sector, 
+          target: 0, 
+          invited: legacyInvited, 
+          confirmed: legacyConfirmed, 
+          isNew: true 
+      };
   });
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const csvData = parseCSV(event.target.result);
-      let count = 0;
-      csvData.forEach(row => {
-        const name = row.name || row['full name'];
-        if(name) { 
-            add({
-                name: name,
-                org: row.org || row.organization || row.institution || "",
-                sector: row.sector || row.stakeholder || "Other",
-                status: row.status || 'Invited',
-                remarks: row.remarks || row.Notes || ''
-            });
-            count++;
-        }
-      });
-      notify(`Imported ${count} guests!`, 'success');
-    };
-    reader.readAsText(file);
+  const { items: sortedSectors, requestSort, sortConfig } = useSortableData(sectorData);
+
+  const handleUpdate = (item, field, val) => {
+      const num = Number(val) || 0;
+      if (item.isNew) {
+          add({ sector: item.sector, target: 0, invited: item.invited, confirmed: item.confirmed, [field]: num });
+      } else {
+          update(item.id, { [field]: num });
+      }
   };
 
-  const openEditModal = (item = null) => {
-      setEditingItem(item);
-      setShowModal(true);
-  };
+  const totalTarget = sectorData.reduce((acc, curr) => acc + (Number(curr.target)||0), 0);
+  const totalInvited = sectorData.reduce((acc, curr) => acc + (Number(curr.invited)||0), 0);
+  const totalConfirmed = sectorData.reduce((acc, curr) => acc + (Number(curr.confirmed)||0), 0);
 
   return (
     <div className="h-full flex flex-col gap-6 bg-white rounded-3xl border shadow-sm overflow-hidden">
-       <div className="p-6 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-black text-slate-800">Master Guest List</h2>
-            <div className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-white px-3 py-1.5 rounded-lg border shadow-sm">Total: {filteredAttendees.length}</div>
+       <div className="p-8 border-b flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50">
+          <div>
+            <h2 className="text-2xl font-black text-slate-800">Sectoral Guest Breakdown</h2>
+            <p className="text-slate-500">Track target allocations vs actual confirmations</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center px-4 py-2 bg-white border border-slate-200 rounded-xl max-w-[200px] mr-1">
-                <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
-                <input placeholder="Search guests..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
-            </div>
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
-                <Filter size={14} className="text-slate-400 mr-2"/>
-                <select value={filterSector} onChange={e => setFilterSector(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[120px] truncate">
-                    <option value="All">All Sectors</option>
-                    {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-            </div>
-            <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2 mr-1">
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer max-w-[100px]">
-                    <option value="All">All Status</option>
-                    <option value="Invited">Invited</option>
-                    <option value="Confirmed">Confirmed</option>
-                    <option value="Declined">Declined</option>
-                </select>
-            </div>
-            {isAdmin && (
-              <>
-                <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleFileUpload}/>
-                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
-                <button onClick={() => exportToCSV(attendees, 'nid-guests', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
-                <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Add Guest</button>
-              </>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+             <div className="flex items-center gap-4 bg-white px-6 py-2 rounded-xl border shadow-sm">
+                 <div><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Target</span><span className="font-black text-slate-800">{totalTarget}</span></div>
+                 <div className="w-px h-8 bg-slate-200"></div>
+                 <div><span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest block">Invited</span><span className="font-black text-blue-700">{totalInvited}</span></div>
+                 <div className="w-px h-8 bg-slate-200"></div>
+                 <div><span className="text-[10px] font-bold text-green-400 uppercase tracking-widest block">Confirmed</span><span className="font-black text-green-700">{totalConfirmed}</span></div>
+             </div>
+             <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" rel="noreferrer" className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-emerald-100 transition-colors">
+                 <ExternalLink size={18}/> Open Master Database
+             </a>
           </div>
        </div>
        <div className="flex-1 overflow-auto">
           <table className="w-full text-sm text-left">
              <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
-                <tr><th className="p-5">Name / Organization</th><th className="p-5">Sector</th><th className="p-5 w-40">RSVP Status</th>{isAdmin && <th className="p-5">Remarks</th>}{isAdmin && <th className="p-5 w-24 text-right">Actions</th>}</tr>
+                <tr>
+                   <SortableHeader label="Sector" sortKey="sector" currentSort={sortConfig} requestSort={requestSort} />
+                   <SortableHeader label="Target Allocation" sortKey="target" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+                   <SortableHeader label="Total Invited" sortKey="invited" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+                   <SortableHeader label="Confirmed Attendees" sortKey="confirmed" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
+                   <th className="p-5 text-center">Confirmation Progress</th>
+                </tr>
              </thead>
              <tbody className="divide-y divide-slate-100">
-                {filteredAttendees.map(g => (
+                {sortedSectors.map(g => {
+                  const rate = g.target > 0 ? Math.round((g.confirmed / g.target) * 100) : 0;
+                  return (
                   <tr key={g.id} className="hover:bg-slate-50/80 transition-colors group">
-                     <td className="p-5">
-                       <div className="font-bold text-slate-800 text-base">{safeStr(g.name)}</div>
-                       <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{safeStr(g.org)}</div>
+                     <td className="p-6">
+                         <span className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest inline-block border ${getColorClass(g.sector)}`}>{safeStr(g.sector)}</span>
                      </td>
-                     <td className="p-5">
-                         <span className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest inline-block border ${getColorClass(g.sector)}`}>{safeStr(g.sector)}</span>
+                     <td className="p-6 text-center">
+                         {isAdmin ? <input type="number" value={g.target} onChange={e => handleUpdate(g, 'target', e.target.value)} className="w-24 text-center bg-slate-50 border border-slate-200 rounded-xl p-3 font-black text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all hover:bg-white" /> : <span className="font-black text-slate-700 text-lg">{g.target}</span>}
                      </td>
-                     <td className="p-5">
-                        <select value={safeStr(g.status).trim() || 'Invited'} onChange={(e) => update(g.id, { status: e.target.value })} 
-                            className={`text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-md border outline-none cursor-pointer w-full transition-colors
-                            ${safeStr(g.status).trim() === 'Confirmed' ? 'bg-green-50 border-green-200 text-green-600' : safeStr(g.status).trim() === 'Declined' ? 'bg-red-50 border-red-200 text-red-600' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
-                            <option value="Invited">Invited</option>
-                            <option value="Confirmed">Confirmed</option>
-                            <option value="Declined">Declined</option>
-                        </select>
+                     <td className="p-6 text-center">
+                         {isAdmin ? <input type="number" value={g.invited} onChange={e => handleUpdate(g, 'invited', e.target.value)} className="w-24 text-center bg-blue-50 text-blue-700 border border-blue-200 rounded-xl p-3 font-black focus:ring-2 focus:ring-blue-500 outline-none transition-all hover:bg-white" /> : <span className="font-black text-blue-700 text-lg">{g.invited}</span>}
                      </td>
-                     {isAdmin && <td className="p-5 text-xs text-slate-500 italic max-w-[150px] truncate" title={g.remarks}>{g.remarks}</td>}
-                     {isAdmin && (
-                         <td className="p-5 text-right">
-                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => openEditModal(g)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
-                                <button onClick={() => remove(g.id)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
-                           </div>
-                         </td>
-                     )}
+                     <td className="p-6 text-center">
+                         {isAdmin ? <input type="number" value={g.confirmed} onChange={e => handleUpdate(g, 'confirmed', e.target.value)} className="w-24 text-center bg-green-50 text-green-700 border border-green-200 rounded-xl p-3 font-black focus:ring-2 focus:ring-green-500 outline-none transition-all hover:bg-white" /> : <span className="font-black text-green-700 text-lg">{g.confirmed}</span>}
+                     </td>
+                     <td className="p-6 text-center">
+                         <div className="flex items-center justify-center gap-3">
+                            <div className="w-32 h-3 bg-slate-100 rounded-full overflow-hidden border border-slate-200">
+                               <div className={`h-full ${rate >= 100 ? 'bg-green-500' : rate >= 50 ? 'bg-blue-500' : 'bg-orange-500'}`} style={{ width: `${Math.min(rate, 100)}%` }}></div>
+                            </div>
+                            <span className="text-xs font-black text-slate-500 w-10">{rate}%</span>
+                         </div>
+                     </td>
                   </tr>
-                ))}
+                )})}
              </tbody>
           </table>
        </div>
-
-       {showModal && isAdmin && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-           <form onSubmit={e => {
-             e.preventDefault();
-             const fd = new FormData(e.target);
-             const data = { 
-                 name: fd.get('name') || '', org: fd.get('org') || '', 
-                 sector: fd.get('sector') || '', remarks: fd.get('remarks') || '',
-                 status: editingItem?.status || 'Invited' 
-             };
-             if (editingItem) update(editingItem.id, data); else add(data);
-             setShowModal(false);
-           }} className="bg-white p-8 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl">
-              <h3 className="text-xl font-bold">{editingItem ? 'Edit Guest' : 'Add Guest'}</h3>
-              <input name="name" defaultValue={editingItem?.name} placeholder="Full Name" required className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium"/>
-              <input name="org" defaultValue={editingItem?.org} placeholder="Organization" required className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium"/>
-              <div className="space-y-1">
-                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Sector Classification</label>
-                 <select name="sector" defaultValue={editingItem?.sector} className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium text-slate-700">
-                    {SECTORS.map(s => <option key={s}>{s}</option>)}
-                 </select>
-              </div>
-              {isAdmin && <input name="remarks" defaultValue={editingItem?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>}
-              <div className="flex gap-2 pt-4">
-                <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-colors">Save</button>
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
-              </div>
-           </form>
-        </div>
-      )}
     </div>
   );
 };
@@ -1676,6 +1754,8 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
       safeStr(m.title).toLowerCase().includes(searchTerm.toLowerCase()) || 
       safeStr(m.date).includes(searchTerm)
   );
+
+  const { items: sortedMeetings, requestSort, sortConfig } = useSortableData(filteredMeetings, { key: 'date', direction: 'descending' });
 
   const handleBulkUpload = (e) => {
     const file = e.target.files[0];
@@ -1733,7 +1813,7 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
       
       {viewMode === 'grid' ? (
         <div className="flex-1 overflow-auto p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-           {filteredMeetings.map(m => (
+           {sortedMeetings.map(m => (
              <div key={m.id} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all relative group flex flex-col">
               {isAdmin && (
                   <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1768,10 +1848,17 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
         <div className="flex-1 overflow-auto bg-white rounded-b-3xl">
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10 border-b border-slate-200">
-              <tr><th className="p-4">Date</th><th className="p-4">Meeting Title</th><th className="p-4">Attendees</th><th className="p-4">Minutes Link</th>{isAdmin && <th className="p-4">Remarks</th>}{isAdmin && <th className="p-4 text-right">Actions</th>}</tr>
+              <tr>
+                 <SortableHeader label="Date" sortKey="date" currentSort={sortConfig} requestSort={requestSort} />
+                 <SortableHeader label="Meeting Title" sortKey="title" currentSort={sortConfig} requestSort={requestSort} />
+                 <th className="p-4">Attendees</th>
+                 <th className="p-4">Minutes Link</th>
+                 {isAdmin && <th className="p-4">Remarks</th>}
+                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+              </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredMeetings.sort((a,b) => new Date(b.date) - new Date(a.date)).map(m => (
+              {sortedMeetings.map(m => (
                 <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                   <td className="p-4 whitespace-nowrap">
                     <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-md">{safeStr(m.date)}</span>
@@ -1848,6 +1935,8 @@ const BudgetManager = ({ dataObj, notify }) => {
         return matchStatus && matchSearch;
     });
 
+    const { items: sortedBudget, requestSort, sortConfig } = useSortableData(filteredBudget, { key: 'amount', direction: 'descending' });
+
     const totalSpent = filteredBudget.reduce((a, b) => a + Number(b.amount || 0), 0);
     const overallSpent = budget.reduce((a, b) => a + Number(b.amount || 0), 0);
 
@@ -1919,10 +2008,15 @@ const BudgetManager = ({ dataObj, notify }) => {
                 <div className="flex-1 overflow-auto px-8 pb-8">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest sticky top-0 z-10">
-                            <tr><th className="p-4 rounded-tl-xl">Item / Expense</th><th className="p-4">Amount</th><th className="p-4">Status</th><th className="p-4 text-right rounded-tr-xl">Actions</th></tr>
+                            <tr>
+                                <SortableHeader label="Item / Expense" sortKey="item" currentSort={sortConfig} requestSort={requestSort} className="rounded-tl-xl" />
+                                <SortableHeader label="Amount" sortKey="amount" currentSort={sortConfig} requestSort={requestSort} />
+                                <SortableHeader label="Status" sortKey="status" currentSort={sortConfig} requestSort={requestSort} />
+                                <th className="p-4 text-right rounded-tr-xl">Actions</th>
+                            </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {filteredBudget.map(b => (
+                            {sortedBudget.map(b => (
                                 <tr key={b.id} className="hover:bg-slate-50/50 transition-colors group">
                                     <td className="p-4 font-bold text-slate-800 text-base">
                                         {safeStr(b.item)}
@@ -2154,7 +2248,7 @@ const App = () => {
     { id: 'tasks', icon: CheckSquare, label: 'Task Board' },
     { id: 'org', icon: Users, label: 'Org Structure' },
     { id: 'program', icon: Calendar, label: 'Program' },
-    { id: 'speakers', icon: Mic2, label: 'Speakers' },
+    { id: 'speakers', icon: Mic2, label: 'Speakers & VIPs' },
     { id: 'guests', icon: UserCheck, label: 'Guest List' },
     { id: 'meetings', icon: Video, label: 'Meetings' },
     { id: 'risks', icon: AlertTriangle, label: 'Risks' },
