@@ -187,7 +187,6 @@ const useSortableData = (items, config = null) => {
     let sortableItems = [...items];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
-        // Special Handling for Priority Levels
         if (sortConfig.key === 'priority') {
             const priorityMap = { 'Critical': 4, 'High': 3, 'Medium': 2, 'Low': 1 };
             const aVal = priorityMap[a.priority] || 0;
@@ -206,7 +205,6 @@ const useSortableData = (items, config = null) => {
         aVal = safeStr(aVal).toLowerCase();
         bVal = safeStr(bVal).toLowerCase();
 
-        // Check if numeric sorting is possible
         const aNum = parseFloat(aVal);
         const bNum = parseFloat(bVal);
         if (!isNaN(aNum) && !isNaN(bNum) && aVal.match(/^-?\d+(\.\d+)?$/) && bVal.match(/^-?\d+(\.\d+)?$/)) {
@@ -215,7 +213,6 @@ const useSortableData = (items, config = null) => {
             return 0;
         }
 
-        // String sorting
         if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
@@ -259,7 +256,6 @@ const SECTORS = [
   "Resource Speaker", "HABI Mentor"
 ];
 
-// Added VIPs Only logging option 
 const SPEAKER_DAYS = ["Day 0", "Day 1", "Day 2 (Morning)", "Day 2 (Afternoon)", "VIPs Only"];
 const SPEAKER_ASSIGNMENTS = [
   "TBD", "Opening Remarks", "Closing Remarks", "Scene Setter", 
@@ -346,10 +342,8 @@ const DashboardHome = ({ tasks = [], setActiveTab, speakers = [], attendees = []
   const overdueTasks = tasks.filter(t => safeStr(t.status).trim() === 'Overdue');
   const confirmedSpeakers = speakers.filter(s => safeStr(s.status).trim() === 'Confirmed').length;
   
-  // Sectoral Confirmation Stats
   const confirmedGuests = attendees.reduce((acc, curr) => {
       if (curr.confirmed !== undefined) return acc + Number(curr.confirmed);
-      // Fallback for legacy itemized db items
       return acc + (safeStr(curr.status).trim() === 'Confirmed' ? 1 : 0);
   }, 0);
 
@@ -619,18 +613,20 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                     <option value="4">Level 4 (Support)</option>
                 </select>
             </div>
+            
+            <button onClick={() => exportToCSV(members, 'nid-org-structure', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleFileUpload}/>
                 <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import CSV</span></button>
-                <button onClick={() => exportToCSV(members, 'nid-org-structure', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
               </>
             )}
+            
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => setViewMode('tree')} className={`p-1.5 rounded-md transition-all ${viewMode === 'tree' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Tree View"><Grid size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
             </div>
-            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add Member</button>}
+            <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add Member</button>
         </div>
       </div>
       
@@ -641,7 +637,7 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
           {levels.map((level) => {
             const lvMembers = filteredMembers.filter(m => Number(m.level) === level);
             if (lvMembers.length === 0 && filterLevel !== 'All') return null; 
-            if (lvMembers.length === 0 && !isAdmin) return null; 
+            if (lvMembers.length === 0) return null; 
             
             return (
               <div key={level} 
@@ -652,7 +648,7 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                        e.preventDefault();
                        e.currentTarget.classList.remove('bg-blue-50/50', 'border-blue-200', 'border-dashed');
                        const memberId = e.dataTransfer.getData('orgMemberId');
-                       if(memberId && isAdmin) update(memberId, { level });
+                       if(memberId) update(memberId, { level });
                    }}
               >
                   <div className={`px-5 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-8 shadow-md border-2 border-white relative z-20 
@@ -669,16 +665,15 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                           <div key={m.id} className="relative flex flex-col items-center">
                               {lvMembers.length > 1 && filterLevel === 'All' && <div className="hidden md:block w-1 h-6 bg-slate-200 absolute -top-6 rounded-full"></div>}
                               
-                              <div draggable={isAdmin} 
+                              <div draggable={true} 
                                    onDragStart={e => e.dataTransfer.setData('orgMemberId', m.id)}
-                                   className={`bg-white p-6 rounded-2xl border-2 text-center shadow-sm w-52 hover:shadow-xl hover:-translate-y-1 transition-all group/card relative 
-                                   ${isAdmin ? 'cursor-grab active:cursor-grabbing' : ''} ${m.level === 1 ? 'border-blue-200' : 'border-slate-100 hover:border-blue-300'}`}>
-                                  {isAdmin && (
-                                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
-                                       <button onClick={() => openEditModal(m)} className="text-slate-400 hover:text-blue-500 bg-slate-50 border p-1 rounded shadow-sm"><Edit2 size={12}/></button>
-                                       <button onClick={() => remove(m.id)} className="text-slate-400 hover:text-red-500 bg-slate-50 border p-1 rounded shadow-sm"><Trash2 size={12}/></button>
-                                    </div>
-                                  )}
+                                   className={`bg-white p-6 rounded-2xl border-2 text-center shadow-sm w-52 hover:shadow-xl hover:-translate-y-1 transition-all group/card relative cursor-grab active:cursor-grabbing
+                                   ${m.level === 1 ? 'border-blue-200' : 'border-slate-100 hover:border-blue-300'}`}>
+                                  
+                                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                                      <button onClick={() => openEditModal(m)} className="text-slate-400 hover:text-blue-500 bg-slate-50 border p-1 rounded shadow-sm"><Edit2 size={12}/></button>
+                                      {isAdmin && <button onClick={() => remove(m.id)} className="text-slate-400 hover:text-red-500 bg-slate-50 border p-1 rounded shadow-sm"><Trash2 size={12}/></button>}
+                                  </div>
                                   
                                   {m.photo ? (
                                       <img src={m.photo} alt={m.name} className="w-16 h-16 mx-auto mb-4 rounded-2xl object-cover shadow-lg border-2 border-slate-100 bg-slate-50" onError={(e) => { e.target.onerror = null; e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name)}&background=e0e7ff&color=4f46e5`; }} />
@@ -696,7 +691,7 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                               </div>
                           </div>
                       ))}
-                      {lvMembers.length === 0 && isAdmin && (
+                      {lvMembers.length === 0 && (
                           <div className="text-xs font-bold text-slate-300 border-2 border-dashed border-slate-200 p-4 rounded-2xl w-52 flex items-center justify-center">Drag members here</div>
                       )}
                   </div>
@@ -714,7 +709,7 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                 <SortableHeader label="Division" sortKey="division" currentSort={sortConfig} requestSort={requestSort} />
                 <SortableHeader label="Level" sortKey="level" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
                 {isAdmin && <th className="p-4">Remarks</th>}
-                {isAdmin && <th className="p-4 text-right">Actions</th>}
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -736,14 +731,12 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
                     <span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${m.level === 1 ? 'bg-blue-100 text-blue-700' : m.level === 2 ? 'bg-indigo-100 text-indigo-700' : m.level === 3 ? 'bg-sky-100 text-sky-700' : 'bg-slate-100 text-slate-700'}`}>Level {m.level}</span>
                   </td>
                   {isAdmin && <td className="p-4 text-xs text-slate-500 italic max-w-[150px] truncate" title={m.remarks}>{m.remarks}</td>}
-                  {isAdmin && (
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => openEditModal(m)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
-                         <button onClick={() => remove(m.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditModal(m)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
+                        {isAdmin && <button onClick={() => remove(m.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -882,22 +875,23 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
                </div>
            )}
 
+           <button onClick={() => exportToCSV(tasks, 'nid-tasks', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
            {isAdmin && (
              <>
                <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleFileUpload}/>
                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
-               <button onClick={() => exportToCSV(tasks, 'nid-tasks', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
              </>
            )}
            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => {setViewMode('board'); setFilterStatus('All');}} className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Board View"><Columns size={16}/></button>
                <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md transition-all ${viewMode === 'list' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
            </div>
-           {isAdmin && <button onClick={() => { 
+           
+           <button onClick={() => { 
              setEditingTask(null); 
              setSelectedAssignees([]); 
              setShowModal(true); 
-            }} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add Task</button>}
+           }} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add Task</button>
         </div>
       </div>
 
@@ -913,16 +907,16 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
                  </div>
                  <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
                   {filteredTasks.filter(t => safeStr(t.status).trim() === col).map(t => (
-                    <div key={t.id} draggable={isAdmin} onDragStart={e => handleDragStart(e, t.id)} 
-                         className={`bg-white p-4 rounded-2xl shadow-sm border transition-all group relative ${getStatusBorder(t.status)} ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-lg hover:-translate-y-1' : ''}`}>
+                    <div key={t.id} draggable={true} onDragStart={e => handleDragStart(e, t.id)} 
+                         className={`bg-white p-4 rounded-2xl shadow-sm border transition-all group relative cursor-grab active:cursor-grabbing hover:shadow-lg hover:-translate-y-1 ${getStatusBorder(t.status)}`}>
                       <div className="flex justify-between items-start mb-3">
                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${t.priority === 'Critical' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>{safeStr(t.priority)}</span>
                         <div className="flex gap-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity absolute right-2 top-2">
-                           {isAdmin && <button onClick={() => { 
+                           <button onClick={() => { 
                              setEditingTask(t); 
                              setSelectedAssignees(Array.isArray(t.assignedTo) ? t.assignedTo : [t.assignedTo]);
                              setShowModal(true); 
-                          }} className="p-1.5 bg-white border rounded-lg text-slate-400 hover:text-blue-600 shadow-sm"><Edit2 size={12}/></button>}
+                           }} className="p-1.5 bg-white border rounded-lg text-slate-400 hover:text-blue-600 shadow-sm"><Edit2 size={12}/></button>
                            {isAdmin && <button onClick={() => remove(t.id)} className="p-1.5 bg-white border rounded-lg text-slate-400 hover:text-red-500 shadow-sm"><Trash2 size={12}/></button>}
                         </div>
                       </div>
@@ -978,7 +972,7 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
                  <SortableHeader label="Priority" sortKey="priority" currentSort={sortConfig} requestSort={requestSort} />
                  <SortableHeader label="Status" sortKey="status" currentSort={sortConfig} requestSort={requestSort} className="w-40" />
                  {isAdmin && <th className="p-4">Remarks</th>}
-                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1008,14 +1002,12 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
                     </select>
                   </td>
                   {isAdmin && <td className="p-4 text-xs text-slate-500 italic max-w-[150px] truncate" title={t.remarks}>{t.remarks}</td>}
-                  {isAdmin && (
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => { setEditingTask(t); setSelectedAssignees(Array.isArray(t.assignedTo) ? t.assignedTo : [t.assignedTo]); setShowModal(true); }} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-600"><Edit2 size={14}/></button>
-                        <button onClick={() => remove(t.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
-                      </div>
-                    </td>
-                  )}
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setEditingTask(t); setSelectedAssignees(Array.isArray(t.assignedTo) ? t.assignedTo : [t.assignedTo]); setShowModal(true); }} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-600"><Edit2 size={14}/></button>
+                      {isAdmin && <button onClick={() => remove(t.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1023,7 +1015,7 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
         </div>
       )}
 
-      {showModal && isAdmin && (
+      {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
            <div className="bg-white p-8 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
               <h3 className="text-2xl font-bold mb-6">{editingTask ? 'Edit Task' : 'Add Task'}</h3>
@@ -1070,7 +1062,7 @@ const TaskManager = ({ dataObj, isAdmin, committees = [], teamMembers = [], noti
                     <div><label className="text-xs font-bold uppercase text-slate-400 ml-1">Due Date</label><input name="endDate" type="date" defaultValue={editingTask?.endDate} className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium"/></div>
                  </div>
                  
-                 <input name="remarks" defaultValue={editingTask?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>
+                 {isAdmin && <input name="remarks" defaultValue={editingTask?.remarks} placeholder="Admin Remarks (Optional)" className="w-full p-4 border border-slate-200 rounded-2xl outline-none font-medium bg-slate-50 text-slate-700"/>}
 
                  <div className="flex gap-2 pt-4">
                     <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700">Save Task</button>
@@ -1157,18 +1149,19 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
                    {days.map(d => <option key={d} value={d}>{d}</option>)}
                </select>
            </div>
+           
+           <button onClick={() => exportToCSV(events, 'nid-program', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
            {isAdmin && (
              <>
                <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
-               <button onClick={() => exportToCSV(events, 'nid-program', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
              </>
            )}
            <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => setViewMode('timeline')} className={`p-1.5 rounded-md transition-all ${viewMode === 'timeline' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Timeline View"><List size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
            </div>
-           {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Add Activity</button>}
+           <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Add Activity</button>
         </div>
       </div>
       
@@ -1192,12 +1185,10 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
                     )}
                     {e.remarks && <p className="text-xs text-slate-500 mt-2 bg-yellow-50 border-l-2 border-yellow-300 pl-2 py-1 italic">{safeStr(e.remarks)}</p>}
                     
-                    {isAdmin && (
-                        <div className="absolute top-0 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => openEditModal(e)} className="p-1 bg-white border rounded shadow-sm text-slate-300 hover:text-blue-500"><Edit2 size={12}/></button>
-                            <button onClick={() => remove(e.id)} className="p-1 bg-white border rounded shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={12}/></button>
-                        </div>
-                    )}
+                    <div className="absolute top-0 right-0 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditModal(e)} className="p-1 bg-white border rounded shadow-sm text-slate-300 hover:text-blue-500"><Edit2 size={12}/></button>
+                        {isAdmin && <button onClick={() => remove(e.id)} className="p-1 bg-white border rounded shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={12}/></button>}
+                    </div>
                 </div>
               ))}
             </div>
@@ -1213,7 +1204,7 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
                  <SortableHeader label="Activity" sortKey="activity" currentSort={sortConfig} requestSort={requestSort} />
                  <SortableHeader label="Lead" sortKey="lead" currentSort={sortConfig} requestSort={requestSort} />
                  <th className="p-4">Remarks</th>
-                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1235,14 +1226,12 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
                   <td className="p-4">
                     {e.remarks && <span className="text-xs text-slate-500 bg-yellow-50 border-l-2 border-yellow-300 pl-2 py-1 italic block">{safeStr(e.remarks)}</span>}
                   </td>
-                  {isAdmin && (
-                    <td className="p-4 text-right">
-                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => openEditModal(e)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-blue-500"><Edit2 size={16}/></button>
-                         <button onClick={() => remove(e.id)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
-                       </div>
-                    </td>
-                  )}
+                  <td className="p-4 text-right">
+                     <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => openEditModal(e)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-blue-500"><Edit2 size={16}/></button>
+                       {isAdmin && <button onClick={() => remove(e.id)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>}
+                     </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1250,7 +1239,7 @@ const ProgramManager = ({ dataObj, isAdmin, teamMembers = [], notify }) => {
         </div>
       )}
       
-      {showModal && isAdmin && (
+      {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
            <form onSubmit={e => {
              e.preventDefault();
@@ -1387,18 +1376,20 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
                 </div>
             )}
 
+            <button onClick={() => exportToCSV(speakers, 'nid-speakers', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
                 <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
-                <button onClick={() => exportToCSV(speakers, 'nid-speakers', notify)} className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
               </>
             )}
+            
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => {setViewMode('board'); setFilterStatus('All');}} className={`p-1.5 rounded-md transition-all ${viewMode === 'board' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Board View"><Columns size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
             </div>
-            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add VIP</button>}
+            
+            <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={18}/> Add VIP</button>
          </div>
       </div>
       
@@ -1431,7 +1422,7 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
                  <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
                     {columnSpeakers.map(s => (
                       <div key={s.id} 
-                           draggable={isAdmin} 
+                           draggable={true} 
                            onDragStart={e => e.dataTransfer.setData('speakerId', s.id)} 
                            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
                            onDrop={e => {
@@ -1451,16 +1442,13 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
 
                               update(draggedId, { assignedDay: day, order: newOrder ?? Date.now() });
                            }}
-                           className={`bg-white p-4 rounded-2xl shadow-sm flex flex-col gap-3 relative group transition-all 
-                                      ${safeStr(s.status).trim() === 'Confirmed' ? 'border-2 border-green-200' : safeStr(s.status).trim() === 'Declined' ? 'border border-red-200' : 'border border-slate-200'}
-                                      ${isAdmin ? 'cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1' : ''}`}>
+                           className={`bg-white p-4 rounded-2xl shadow-sm flex flex-col gap-3 relative group transition-all cursor-grab active:cursor-grabbing hover:shadow-xl hover:-translate-y-1
+                                      ${safeStr(s.status).trim() === 'Confirmed' ? 'border-2 border-green-200' : safeStr(s.status).trim() === 'Declined' ? 'border border-red-200' : 'border border-slate-200'}`}>
                           
-                          {isAdmin && (
-                              <div className="absolute top-2 right-2 flex gap-1 opacity-0 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                                  <button onClick={() => openEditModal(s)} className="p-1.5 bg-white border rounded-lg shadow-sm text-slate-400 hover:text-blue-600"><Edit2 size={12}/></button>
-                                  <button onClick={() => remove(s.id)} className="p-1.5 bg-white border rounded-lg shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={12}/></button>
-                              </div>
-                          )}
+                          <div className="absolute top-2 right-2 flex gap-1 opacity-0 md:opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                              <button onClick={() => openEditModal(s)} className="p-1.5 bg-white border rounded-lg shadow-sm text-slate-400 hover:text-blue-600"><Edit2 size={12}/></button>
+                              {isAdmin && <button onClick={() => remove(s.id)} className="p-1.5 bg-white border rounded-lg shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={12}/></button>}
+                          </div>
 
                           <div className="flex items-center gap-3 pr-12">
                               <div className="relative shrink-0">
@@ -1515,7 +1503,7 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
                  <SortableHeader label="Assignment" sortKey="assignment" currentSort={sortConfig} requestSort={requestSort} />
                  <SortableHeader label="Status" sortKey="status" currentSort={sortConfig} requestSort={requestSort} className="w-40" />
                  {isAdmin && <th className="p-4">Remarks</th>}
-                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1552,14 +1540,12 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
                     </select>
                   </td>
                   {isAdmin && <td className="p-4 text-xs text-slate-500 italic max-w-[150px] truncate" title={s.remarks}>{s.remarks}</td>}
-                  {isAdmin && (
-                    <td className="p-4 text-right">
-                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => openEditModal(s)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
-                         <button onClick={() => remove(s.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>
-                       </div>
-                    </td>
-                  )}
+                  <td className="p-4 text-right">
+                     <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => openEditModal(s)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
+                       {isAdmin && <button onClick={() => remove(s.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>}
+                     </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1567,7 +1553,7 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
         </div>
       )}
       
-      {showModal && isAdmin && (
+      {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
            <form onSubmit={e => {
              e.preventDefault();
@@ -1640,14 +1626,13 @@ const SpeakerManager = ({ dataObj, isAdmin, notify }) => {
 
 // --- COMPONENT: GUEST MANAGER (Sectoral View) ---
 const GuestManager = ({ attendeesObj, isAdmin }) => {
-  const { data: attendees = [], add, update } = attendeesObj;
+  const { data: attendees = [], add, update, remove } = attendeesObj;
+  const [showModal, setShowModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
   
-  // Aggregate sectoral data robustly (handles both new structure and legacy itemized lists)
-  const sectorData = SECTORS.map(sector => {
-      // Find if we already saved an aggregate sector document
+  // Aggregate sectoral data robustly
+  const predefinedSectors = SECTORS.map(sector => {
       const existing = attendees.find(a => a.sector === sector && a.target !== undefined);
-      
-      // Fallback for calculating legacy itemized attendees
       const legacyInvited = attendees.filter(a => a.sector === sector && a.target === undefined).length;
       const legacyConfirmed = attendees.filter(a => a.sector === sector && safeStr(a.status).trim() === 'Confirmed' && a.target === undefined).length;
 
@@ -1661,15 +1646,15 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
       };
   });
 
+  // Include any custom sectors added dynamically
+  const customSectors = attendees.filter(a => a.target !== undefined && !SECTORS.includes(a.sector));
+  const sectorData = [...predefinedSectors, ...customSectors];
+
   const { items: sortedSectors, requestSort, sortConfig } = useSortableData(sectorData);
 
-  const handleUpdate = (item, field, val) => {
-      const num = Number(val) || 0;
-      if (item.isNew) {
-          add({ sector: item.sector, target: 0, invited: item.invited, confirmed: item.confirmed, [field]: num });
-      } else {
-          update(item.id, { [field]: num });
-      }
+  const openEditModal = (item = null) => {
+      setEditingItem(item);
+      setShowModal(true);
   };
 
   const totalTarget = sectorData.reduce((acc, curr) => acc + (Number(curr.target)||0), 0);
@@ -1691,8 +1676,13 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
                  <div className="w-px h-8 bg-slate-200"></div>
                  <div><span className="text-[10px] font-bold text-green-400 uppercase tracking-widest block">Confirmed</span><span className="font-black text-green-700">{totalConfirmed}</span></div>
              </div>
-             <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" rel="noreferrer" className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3.5 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-emerald-100 transition-colors">
-                 <ExternalLink size={18}/> Open Master Database
+             
+             <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-3 rounded-xl font-bold shadow-sm flex items-center gap-2 hover:bg-blue-700 transition-colors">
+                 <Plus size={18}/> Add Sector
+             </button>
+
+             <a href="https://docs.google.com/spreadsheets/u/0/" target="_blank" rel="noreferrer" className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-5 py-3 rounded-xl font-bold text-sm shadow-sm flex items-center gap-2 hover:bg-emerald-100 transition-colors">
+                 <ExternalLink size={18}/> Master DB
              </a>
           </div>
        </div>
@@ -1705,6 +1695,7 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
                    <SortableHeader label="Total Invited" sortKey="invited" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
                    <SortableHeader label="Confirmed Attendees" sortKey="confirmed" currentSort={sortConfig} requestSort={requestSort} className="text-center" />
                    <th className="p-5 text-center">Confirmation Progress</th>
+                   <th className="p-5 text-right">Actions</th>
                 </tr>
              </thead>
              <tbody className="divide-y divide-slate-100">
@@ -1716,13 +1707,13 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
                          <span className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest inline-block border ${getColorClass(g.sector)}`}>{safeStr(g.sector)}</span>
                      </td>
                      <td className="p-6 text-center">
-                         {isAdmin ? <input type="number" value={g.target} onChange={e => handleUpdate(g, 'target', e.target.value)} className="w-24 text-center bg-slate-50 border border-slate-200 rounded-xl p-3 font-black text-slate-700 focus:ring-2 focus:ring-blue-500 outline-none transition-all hover:bg-white" /> : <span className="font-black text-slate-700 text-lg">{g.target}</span>}
+                         <span className="font-black text-slate-700 text-lg">{g.target}</span>
                      </td>
                      <td className="p-6 text-center">
-                         {isAdmin ? <input type="number" value={g.invited} onChange={e => handleUpdate(g, 'invited', e.target.value)} className="w-24 text-center bg-blue-50 text-blue-700 border border-blue-200 rounded-xl p-3 font-black focus:ring-2 focus:ring-blue-500 outline-none transition-all hover:bg-white" /> : <span className="font-black text-blue-700 text-lg">{g.invited}</span>}
+                         <span className="font-black text-blue-700 text-lg">{g.invited}</span>
                      </td>
                      <td className="p-6 text-center">
-                         {isAdmin ? <input type="number" value={g.confirmed} onChange={e => handleUpdate(g, 'confirmed', e.target.value)} className="w-24 text-center bg-green-50 text-green-700 border border-green-200 rounded-xl p-3 font-black focus:ring-2 focus:ring-green-500 outline-none transition-all hover:bg-white" /> : <span className="font-black text-green-700 text-lg">{g.confirmed}</span>}
+                         <span className="font-black text-green-700 text-lg">{g.confirmed}</span>
                      </td>
                      <td className="p-6 text-center">
                          <div className="flex items-center justify-center gap-3">
@@ -1732,11 +1723,62 @@ const GuestManager = ({ attendeesObj, isAdmin }) => {
                             <span className="text-xs font-black text-slate-500 w-10">{rate}%</span>
                          </div>
                      </td>
+                     <td className="p-6 text-right">
+                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => openEditModal(g)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
+                            {isAdmin && !g.isNew && <button onClick={() => remove(g.id)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={16}/></button>}
+                         </div>
+                     </td>
                   </tr>
                 )})}
              </tbody>
           </table>
        </div>
+
+       {showModal && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+             <form onSubmit={e => {
+               e.preventDefault();
+               const fd = new FormData(e.target);
+               const data = { 
+                  sector: fd.get('sector') || '',
+                  target: Number(fd.get('target')) || 0,
+                  invited: Number(fd.get('invited')) || 0,
+                  confirmed: Number(fd.get('confirmed')) || 0
+               };
+               if (editingItem && !editingItem.isNew) update(editingItem.id, data); 
+               else add(data);
+               setShowModal(false);
+             }} className="bg-white p-8 rounded-3xl w-full max-w-md space-y-4 shadow-2xl">
+                <h3 className="text-xl font-bold">{editingItem && !editingItem.isNew ? 'Edit Sector Forms' : 'Add Guest Sector'}</h3>
+                
+                <div>
+                   <label className="text-xs font-bold text-slate-400 uppercase ml-1">Sector Name</label>
+                   <input name="sector" defaultValue={editingItem?.sector} required className="w-full p-4 mt-1 border border-slate-200 rounded-2xl outline-none font-medium"/>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-3">
+                   <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Target</label>
+                      <input name="target" type="number" defaultValue={editingItem?.target} className="w-full p-4 mt-1 border border-slate-200 rounded-2xl outline-none font-black text-center"/>
+                   </div>
+                   <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Invited</label>
+                      <input name="invited" type="number" defaultValue={editingItem?.invited} className="w-full p-4 mt-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-2xl outline-none font-black text-center"/>
+                   </div>
+                   <div>
+                      <label className="text-xs font-bold text-slate-400 uppercase ml-1">Confirmed</label>
+                      <input name="confirmed" type="number" defaultValue={editingItem?.confirmed} className="w-full p-4 mt-1 bg-green-50 text-green-700 border border-green-200 rounded-2xl outline-none font-black text-center"/>
+                   </div>
+                </div>
+                
+                <div className="flex gap-2 pt-4">
+                  <button type="submit" className="flex-1 bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-colors">Save Sector</button>
+                  <button type="button" onClick={() => setShowModal(false)} className="px-6 py-4 text-slate-500 font-bold hover:bg-slate-50 rounded-2xl transition-all">Cancel</button>
+                </div>
+             </form>
+          </div>
+       )}
     </div>
   );
 };
@@ -1796,18 +1838,21 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
                 <Search size={16} className="text-slate-400 mr-2 shrink-0"/>
                 <input placeholder="Search title/date..." className="bg-transparent outline-none text-sm font-medium w-full" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
             </div>
+            
+            <button onClick={() => exportToCSV(meetings, 'nid-meetings', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
             {isAdmin && (
               <>
                 <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onClick={(e) => e.target.value = null} onChange={handleBulkUpload}/>
                 <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Upload size={16}/> <span className="hidden xl:inline">Import</span></button>
-                <button onClick={() => exportToCSV(meetings, 'nid-meetings', notify)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2"><Download size={16}/> <span className="hidden xl:inline">Export</span></button>
               </>
             )}
+            
             <div className="flex bg-white p-1 rounded-lg border border-slate-200 mr-2 shadow-sm">
                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md transition-all ${viewMode === 'grid' ? 'bg-slate-100 shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Grid View"><Grid size={16}/></button>
                <button onClick={() => setViewMode('table')} className={`p-1.5 rounded-md transition-all ${viewMode === 'table' ? 'bg-slate-100 shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`} title="Table View"><Table size={16}/></button>
             </div>
-            {isAdmin && <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Log Meeting</button>}
+            
+            <button onClick={() => openEditModal()} className="bg-blue-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"><Plus size={16}/> Log Meeting</button>
         </div>
       </div>
       
@@ -1815,12 +1860,10 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
         <div className="flex-1 overflow-auto p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
            {sortedMeetings.map(m => (
              <div key={m.id} className="bg-white border border-slate-100 p-6 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all relative group flex flex-col">
-              {isAdmin && (
-                  <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => openEditModal(m)} className="p-2 bg-white border rounded shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button>
-                      <button onClick={() => remove(m.id)} className="p-2 bg-white border rounded shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>
-                  </div>
-              )}
+              <div className="absolute top-4 right-4 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => openEditModal(m)} className="p-2 bg-white border rounded shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={14}/></button>
+                  {isAdmin && <button onClick={() => remove(m.id)} className="p-2 bg-white border rounded shadow-sm text-slate-400 hover:text-red-500"><Trash2 size={14}/></button>}
+              </div>
               
               <div className="flex items-center gap-2 mb-4">
                  <Calendar size={16} className="text-indigo-500"/>
@@ -1854,7 +1897,7 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
                  <th className="p-4">Attendees</th>
                  <th className="p-4">Minutes Link</th>
                  {isAdmin && <th className="p-4">Remarks</th>}
-                 {isAdmin && <th className="p-4 text-right">Actions</th>}
+                 <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1875,14 +1918,12 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
                     ) : <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">None</span>}
                   </td>
                   {isAdmin && <td className="p-4 text-xs text-slate-500 italic max-w-[150px] truncate" title={m.remarks}>{m.remarks}</td>}
-                  {isAdmin && (
-                    <td className="p-4 text-right">
-                       <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <button onClick={() => openEditModal(m)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
-                         <button onClick={() => remove(m.id)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
-                       </div>
-                    </td>
-                  )}
+                  <td className="p-4 text-right">
+                     <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button onClick={() => openEditModal(m)} className="p-2 bg-white rounded border shadow-sm text-slate-400 hover:text-blue-500"><Edit2 size={16}/></button>
+                       {isAdmin && <button onClick={() => remove(m.id)} className="p-2 bg-white rounded border shadow-sm text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>}
+                     </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1890,7 +1931,7 @@ const MeetingTracker = ({ dataObj, isAdmin, notify }) => {
         </div>
       )}
       
-      {showModal && isAdmin && (
+      {showModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
            <form onSubmit={e => {
              e.preventDefault();
@@ -2121,8 +2162,7 @@ const SettingsPanel = ({ onBackup, onReset, notify }) => {
 };
 
 // --- COMPONENT: RISKS ---
-const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin, notify }) => {
-    // Overdue auto-detected globally via tasks array passed down
+const Risks = ({ tasks = [], manualRisks = [], setManualRisks, notify }) => {
     const overdue = tasks.filter(t => safeStr(t.status).trim() === 'Overdue');
     const [showModal, setShowModal] = useState(false);
 
@@ -2130,7 +2170,7 @@ const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin, notify }
         <div className="space-y-6 h-full overflow-y-auto pb-10">
             <div className="bg-red-50 border border-red-100 p-8 rounded-3xl shadow-sm flex justify-between items-center">
                 <h2 className="text-3xl font-black text-red-800 mb-2 flex items-center"><AlertTriangle className="mr-3" /> Risk Register</h2>
-                {isAdmin && <button onClick={() => setShowModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-red-700 transition-colors"><Plus size={16}/> Add Manual Risk</button>}
+                <button onClick={() => setShowModal(true)} className="bg-red-600 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg flex items-center gap-2 hover:bg-red-700 transition-colors"><Plus size={16}/> Add Manual Risk</button>
             </div>
             
             {overdue.map(t => (
@@ -2153,7 +2193,7 @@ const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin, notify }
                </div>
             ))}
 
-            {showModal && isAdmin && (
+            {showModal && (
                 <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
                 <form onSubmit={e => {
                     e.preventDefault();
@@ -2176,7 +2216,7 @@ const Risks = ({ tasks = [], manualRisks = [], setManualRisks, isAdmin, notify }
 // --- MAIN APP ---
 const App = () => {
   const [activeTab, setActiveTab] = useState('home');
-  const [isAdmin, setIsAdmin] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -2190,7 +2230,6 @@ const App = () => {
   const budgetHook = useDataSync('budget', INITIAL_BUDGET);
   const meetingsHook = useDataSync('meetings', INITIAL_MEETINGS);
 
-  // Auto-Detect Overdue Logic (Global Application to Tasks)
   const todayStr = new Date().toISOString().split('T')[0];
   const globalProcessedTasks = useMemo(() => {
      if(!tasksHook.data) return [];
@@ -2202,16 +2241,13 @@ const App = () => {
      });
   }, [tasksHook.data, todayStr]);
 
-  // Notifications
   const notify = (message, type = 'info') => {
       setToast({ message, type });
       setTimeout(() => setToast(null), 3000);
   };
 
-  // Derive team members for task assignment from the Org Chart data
   const teamMembers = useMemo(() => {
     if (!orgHook.data) return [];
-    // Only return distinct first+last names to populate dropdowns reliably
     const names = orgHook.data.map(m => safeStr(m.name).trim());
     return [...new Set(names)].sort();
   }, [orgHook.data]);
@@ -2278,7 +2314,7 @@ const App = () => {
            })}
         </nav>
         <div className="p-4 border-t border-slate-800/50">
-          <button onClick={() => { if(isAdmin) { setIsAdmin(false); notify("Logged out of Admin mode"); } else setShowLogin(true); }} className={`w-full p-4 rounded-2xl transition-all duration-200 flex items-center ${isAdmin ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
+          <button onClick={() => { if(isAdmin) { setIsAdmin(false); setActiveTab('home'); notify("Logged out of Admin mode"); } else setShowLogin(true); }} className={`w-full p-4 rounded-2xl transition-all duration-200 flex items-center ${isAdmin ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}>
              {isAdmin ? <Unlock size={18}/> : <Lock size={18}/>}
              <span className="hidden md:block ml-3 text-[10px] font-black uppercase tracking-widest">{isAdmin ? 'Logout' : 'Admin Access'}</span>
           </button>
@@ -2291,7 +2327,6 @@ const App = () => {
         )}
         <div className="flex-1 overflow-y-auto p-4 md:p-10 bg-slate-50/50 custom-scrollbar">
            <div className="max-w-7xl mx-auto h-full relative">
-              {/* Using block/hidden instead of conditional rendering to keep state (search terms, active filters) alive across tab switches! */}
               <div className={`h-full ${activeTab === 'home' ? 'block animate-fade-in' : 'hidden'}`}>
                   <DashboardHome tasks={globalProcessedTasks} setActiveTab={setActiveTab} speakers={speakersHook.data} attendees={attendeesHook.data} budget={budgetHook.data} isAdmin={isAdmin} />
               </div>
@@ -2314,7 +2349,7 @@ const App = () => {
                   <MeetingTracker dataObj={meetingsHook} isAdmin={isAdmin} notify={notify} />
               </div>
               <div className={`h-full ${activeTab === 'risks' ? 'block animate-fade-in' : 'hidden'}`}>
-                  <Risks tasks={globalProcessedTasks} manualRisks={risksHook.data} setManualRisks={risksHook.add} isAdmin={isAdmin} notify={notify} />
+                  <Risks tasks={globalProcessedTasks} manualRisks={risksHook.data} setManualRisks={risksHook.add} notify={notify} />
               </div>
               <div className={`h-full ${activeTab === 'budget' && isAdmin ? 'block animate-fade-in' : 'hidden'}`}>
                   <BudgetManager dataObj={budgetHook} notify={notify} />
