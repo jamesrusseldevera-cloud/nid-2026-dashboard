@@ -252,7 +252,7 @@ const INITIAL_COMMITTEES = [ "Executive Committee", "Programs", "Admin and Coord
 
 const SECTORS = [
   "Startup/MSME", "Development Partner", "National Govt Agency", 
-  "Academe/Research", "NEDA Regional", "NEDA Central", 
+  "Academe/Research", "DEPDev Regional", "DEPDev Central", 
   "Resource Speaker", "HABI Mentor"
 ];
 
@@ -565,7 +565,7 @@ const OrgChart = ({ dataObj, isAdmin, notify }) => {
           add({
             name: name,
             role: row.role || row.Role || 'Member',
-            division: row.division || row.Division || row.Office || 'NEDA',
+            division: row.division || row.Division || row.Office || 'DEPDev',
             level: row.level || row.Level || lvl,
             photo: row.photo || row.Photo || '',
             remarks: row.remarks || row.Notes || ''
